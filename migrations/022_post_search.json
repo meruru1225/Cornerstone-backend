@@ -1,0 +1,58 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 3,
+      "number_of_replicas": 1,
+      "analysis": {
+        "analyzer": {
+          "default": { "type": "ik_max_word" }
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "long" },
+      "user_id": { "type": "long" },
+      "status": { "type": "integer" },
+      "title": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart",
+        "fields": {
+          "suggestion": { "type": "completion", "analyzer": "ik_max_word" }
+        }
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "user_tags": {
+        "type": "keyword"
+      },
+      "ai_tags": {
+        "type": "keyword",
+        "index": true
+      },
+      "media": {
+        "type": "object",
+        "properties": {
+          "type": { "type": "keyword", "index": false },
+          "url": { "type": "keyword", "index": false, "doc_values": false },
+          "cover": { "type": "keyword", "index": false, "doc_values": false },
+          "width": { "type": "integer", "index": false },
+          "height": { "type": "integer", "index": false },
+          "duration": { "type": "integer", "index": false }
+        }
+      },
+      "user_nickname": { "type": "keyword", "index": false },
+      "user_avatar": { "type": "keyword", "index": false, "doc_values": false },
+      "likes_count": { "type": "integer" },
+      "comments_count": { "type": "integer" },
+      "collects_count": { "type": "integer" },
+      "created_at": { "type": "date" },
+      "updated_at": { "type": "date" }
+    }
+  }
+}
