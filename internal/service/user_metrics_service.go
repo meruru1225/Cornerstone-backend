@@ -39,12 +39,12 @@ func (s *userMetricsServiceImpl) CreateUserMetricByYesterday(ctx context.Context
 	if err != nil {
 		return err
 	}
-	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Minute*5)
+	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Minute*5, 3)
 	if err != nil {
 		return err
 	}
 	if !lock {
-		return nil
+		return UnExpectedError
 	}
 	defer redis.UnLock(ctx, lockKey, newUUID.String())
 	yesterday := getMidnight(time.Now()).AddDate(0, 0, -1)
@@ -73,9 +73,9 @@ func (s *userMetricsServiceImpl) AddCountUserMetrics(ctx context.Context, userID
 	if err != nil {
 		return err
 	}
-	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Minute*5)
+	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Minute*5, 3)
 	if err != nil {
-		return err
+		return UnExpectedError
 	}
 	if !lock {
 		return nil

@@ -2,6 +2,8 @@ package kafka
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/es"
+	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
 
@@ -10,34 +12,63 @@ import (
 
 // ConsumerManager 管理所有 Kafka 消费者
 type ConsumerManager struct {
-	userConsumer sarama.ConsumerGroup
-	userHandler  sarama.ConsumerGroupHandler
+	usersConsumer sarama.ConsumerGroup
+	usersHandler  sarama.ConsumerGroupHandler
+
+	userDetailConsumer sarama.ConsumerGroup
+	userDetailHandler  sarama.ConsumerGroupHandler
+
+	userFollowsConsumer sarama.ConsumerGroup
+	userFollowsHandler  sarama.ConsumerGroupHandler
 
 	postConsumer sarama.ConsumerGroup
 	postHandler  sarama.ConsumerGroupHandler
 }
 
 // NewConsumerManager 构造函数
-func NewConsumerManager(cfg *config.Config) (*ConsumerManager, error) {
+func NewConsumerManager(
+	cfg *config.Config,
+	userESRepo es.UserRepo,
+	postESRepo es.PostRepo,
+	userDBRepo repository.UserRepo,
+	userFollowDBRepo repository.UserFollowRepo,
+	postDBRepo repository.PostRepo,
+) (*ConsumerManager, error) {
 	saramaCfg := newSaramaConfig(cfg.Kafka)
 
-	userConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserConsumer.GroupID, saramaCfg)
+	usersConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserConsumer.GroupID, saramaCfg)
 	if err != nil {
 		return nil, err
 	}
-	userHandler := NewUserConsumer()
+	usersHandler := NewUserHandler(userESRepo)
 
-	postConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaPostConsumer.GroupID, saramaCfg)
+	userDetailConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserDetailConsumer.GroupID, saramaCfg)
 	if err != nil {
 		return nil, err
 	}
-	postHandler := NewPostConsumer()
+	userDetailHandler := NewUserDetailHandler(userFollowDBRepo, userESRepo)
+
+	userFollowsConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserFollowsConsumer.GroupID, saramaCfg)
+	if err != nil {
+		return nil, err
+	}
+	userFollowsHandler := NewUserFollowsConsumer()
+
+	postsConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaPostConsumer.GroupID, saramaCfg)
+	if err != nil {
+		return nil, err
+	}
+	postsHandler := NewPostsHandler(userDBRepo, postDBRepo, postESRepo)
 
 	return &ConsumerManager{
-		userConsumer: userConsumer,
-		userHandler:  userHandler,
-		postConsumer: postConsumer,
-		postHandler:  postHandler,
+		usersConsumer:       usersConsumer,
+		usersHandler:        usersHandler,
+		userDetailConsumer:  userDetailConsumer,
+		userDetailHandler:   userDetailHandler,
+		userFollowsConsumer: userFollowsConsumer,
+		userFollowsHandler:  userFollowsHandler,
+		postConsumer:        postsConsumer,
+		postHandler:         postsHandler,
 	}, nil
 }
 
@@ -47,7 +78,7 @@ func (m *ConsumerManager) Start(ctx context.Context, cfg *config.Config) error {
 		topic := cfg.KafkaUserConsumer.Topic
 		log.Info("User consumer started", "topic", topic)
 		for {
-			if err := m.userConsumer.Consume(ctx, []string{topic}, m.userHandler); err != nil {
+			if err := m.userDetailConsumer.Consume(ctx, []string{topic}, m.userDetailHandler); err != nil {
 				log.Error("Error from consumer", "err", err)
 			}
 			if ctx.Err() != nil {
@@ -73,7 +104,7 @@ func (m *ConsumerManager) Start(ctx context.Context, cfg *config.Config) error {
 	<-ctx.Done()
 	log.Info("Kafka Manager shutting down...")
 
-	err := m.userConsumer.Close()
+	err := m.userDetailConsumer.Close()
 	if err != nil {
 		log.Error("Failed to close detail consumer", "err", err)
 	}

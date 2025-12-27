@@ -3,7 +3,6 @@ package service
 import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
-	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/repository"
 	"context"
 	"strconv"
@@ -23,13 +22,11 @@ type PostService interface {
 
 type postServiceImpl struct {
 	postRepo repository.PostRepo
-	tagRepo  repository.TagRepo
 }
 
-func NewPostService(postRepo repository.PostRepo, tagRepo repository.TagRepo) PostService {
+func NewPostService(postRepo repository.PostRepo) PostService {
 	return &postServiceImpl{
 		postRepo: postRepo,
-		tagRepo:  tagRepo,
 	}
 }
 
@@ -43,12 +40,7 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 	post.ID = 0
 
 	postMedias := s.mapMedias(postDTO.Medias)
-	postTags, err := s.processTags(ctx, postDTO.Content)
-	if err != nil {
-		return err
-	}
-
-	return s.postRepo.CreatePost(ctx, post, postMedias, postTags)
+	return s.postRepo.CreatePost(ctx, post, postMedias)
 }
 
 // GetPostById 获取单个帖子
@@ -108,13 +100,7 @@ func (s *postServiceImpl) UpdatePost(ctx context.Context, userID uint64, postID 
 	post.Status = 0
 
 	postMedias := s.mapMedias(postDTO.Medias)
-
-	postTags, err := s.processTags(ctx, postDTO.Content)
-	if err != nil {
-		return err
-	}
-
-	return s.postRepo.UpdatePost(ctx, post, postMedias, postTags)
+	return s.postRepo.UpdatePost(ctx, post, postMedias)
 }
 
 // DeletePost 删除帖子 (包含鉴权)
@@ -188,25 +174,4 @@ func (s *postServiceImpl) mapMedias(dtos []dto.Medias) []*model.PostMedia {
 		}
 	}
 	return postMedias
-}
-
-// processTags 处理 Tags
-func (s *postServiceImpl) processTags(ctx context.Context, content string) ([]*model.PostTag, error) {
-	tagNames := util.ExtractTags(content)
-	if len(tagNames) == 0 {
-		return nil, nil
-	}
-
-	tags, err := s.tagRepo.GetOrCreateTags(ctx, tagNames)
-	if err != nil {
-		return nil, err
-	}
-
-	postTags := make([]*model.PostTag, 0, len(tags))
-	for _, tag := range tags {
-		postTags = append(postTags, &model.PostTag{
-			TagID: tag.ID,
-		})
-	}
-	return postTags, nil
 }

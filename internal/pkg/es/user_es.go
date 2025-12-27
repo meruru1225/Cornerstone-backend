@@ -4,7 +4,7 @@ import "time"
 
 // UserES 对应 user_index 的文档结构
 type UserES struct {
-	UserID         uint64    `json:"user_id"`
+	ID             uint64    `json:"id"`
 	Nickname       string    `json:"nickname"`
 	Bio            string    `json:"bio"`
 	AvatarURL      string    `json:"avatar_url"`

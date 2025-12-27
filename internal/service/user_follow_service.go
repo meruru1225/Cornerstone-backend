@@ -114,17 +114,6 @@ func (s *UserFollowServiceImpl) CreateUserFollow(ctx context.Context, userFollow
 	if err != nil {
 		return err
 	}
-	rdb := redis.GetRdbClient()
-	rdb.ZAdd(ctx, consts.UserFollowerKey+strconv.FormatUint(userFollow.FollowingID, 10), redisv9.Z{
-		Score:  float64(userFollow.CreatedAt.Unix()),
-		Member: userFollow.FollowerID,
-	})
-	rdb.ZAdd(ctx, consts.UserFollowingKey+strconv.FormatUint(userFollow.FollowerID, 10), redisv9.Z{
-		Score:  float64(userFollow.CreatedAt.Unix()),
-		Member: userFollow.FollowingID,
-	})
-	_ = redis.DeleteKey(ctx, consts.UserFollowerCountKey+strconv.FormatUint(userFollow.FollowingID, 10))
-	_ = redis.DeleteKey(ctx, consts.UserFollowingCountKey+strconv.FormatUint(userFollow.FollowerID, 10))
 	return nil
 }
 
@@ -133,11 +122,6 @@ func (s *UserFollowServiceImpl) DeleteUserFollow(ctx context.Context, userFollow
 	if err != nil {
 		return err
 	}
-	rdb := redis.GetRdbClient()
-	rdb.ZRem(ctx, consts.UserFollowerKey+strconv.FormatUint(userFollow.FollowingID, 10), userFollow.FollowerID)
-	rdb.ZRem(ctx, consts.UserFollowingKey+strconv.FormatUint(userFollow.FollowerID, 10), userFollow.FollowingID)
-	_ = redis.DeleteKey(ctx, consts.UserFollowerCountKey+strconv.FormatUint(userFollow.FollowingID, 10))
-	_ = redis.DeleteKey(ctx, consts.UserFollowingCountKey+strconv.FormatUint(userFollow.FollowerID, 10))
 	return nil
 }
 

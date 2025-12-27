@@ -16,7 +16,7 @@ type RoleRepoImpl struct {
 	db *gorm.DB
 }
 
-func NewRoleRepository(db *gorm.DB) RoleRepo {
+func NewRoleRepo(db *gorm.DB) RoleRepo {
 	return &RoleRepoImpl{
 		db: db,
 	}

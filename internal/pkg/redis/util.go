@@ -3,7 +3,6 @@ package redis
 import (
 	"context"
 	"errors"
-	log "log/slog"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -32,13 +31,18 @@ func GetValue(ctx context.Context, key string) (string, error) {
 }
 
 // TryLock 设置键值对并设置过期时间
-func TryLock(ctx context.Context, key string, value interface{}, expiration time.Duration) (bool, error) {
-	isSet := Rdb.SetNX(ctx, key, value, expiration)
-	if isSet.Err() != nil {
-		log.Error("set key failed", "key", key, "err", isSet.Err())
-		return false, isSet.Err()
+func TryLock(ctx context.Context, key string, value interface{}, expiration time.Duration, retryTimes int) (bool, error) {
+	for i := 0; i < retryTimes || retryTimes == -1; i++ {
+		success, err := Rdb.SetNX(ctx, key, value, expiration).Result()
+		if err != nil {
+			return false, err
+		}
+		if success {
+			return true, nil
+		}
+		time.Sleep(time.Millisecond * 200)
 	}
-	return isSet.Val(), nil
+	return false, nil
 }
 
 // UnLock 释放锁

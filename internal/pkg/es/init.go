@@ -15,6 +15,11 @@ var (
 	PostIndex string
 )
 
+const (
+	NotFoundCode = 404
+	ConflictCode = 409
+)
+
 // InitClient 初始化 Elasticsearch 客户端
 func InitClient() error {
 	elasticCfg := config.Cfg.Elastic

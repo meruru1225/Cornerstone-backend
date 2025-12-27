@@ -3,40 +3,44 @@ package repository
 import (
 	"Cornerstone/internal/model"
 	"context"
+	log "log/slog"
 
 	"gorm.io/gorm"
 )
 
 type PostRepo interface {
-	CreatePost(ctx context.Context, post *model.Post, media []*model.PostMedia, tags []*model.PostTag) error
+	CreatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error
 	GetPost(ctx context.Context, id uint64) (*model.Post, error)
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error)
 	GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
-	UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia, tags []*model.PostTag) error
+	GetPostTagNames(ctx context.Context, postId uint64) ([]string, error)
+	UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error
+	UpdatePostStatus(ctx context.Context, id uint64, status int) error
 	DeletePost(ctx context.Context, id uint64) error
+	UpsertPostTag(ctx context.Context, postID uint64, tagName string) error
 }
 
 type PostRepoImpl struct {
 	db *gorm.DB
 }
 
-func NewPostRepository(db *gorm.DB) PostRepo {
+func NewPostRepo(db *gorm.DB) PostRepo {
 	return &PostRepoImpl{
 		db: db,
 	}
 }
 
-func (s PostRepoImpl) CreatePost(ctx context.Context, post *model.Post, media []*model.PostMedia, tags []*model.PostTag) error {
+func (s *PostRepoImpl) CreatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Create(post).Error; err != nil {
 			return err
 		}
-		return s.createPostAssociations(tx, post.ID, media, tags)
+		return s.createPostAssociations(tx, post.ID, media)
 	})
 }
 
-func (s PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, error) {
+func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, error) {
 	var post model.Post
 	err := s.db.WithContext(ctx).
 		Preload("User", func(db *gorm.DB) *gorm.DB {
@@ -57,7 +61,7 @@ func (s PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, erro
 	return &post, nil
 }
 
-func (s PostRepoImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error) {
+func (s *PostRepoImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error) {
 	var posts []*model.Post
 	if len(ids) == 0 {
 		return posts, nil
@@ -81,7 +85,7 @@ func (s PostRepoImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*model.
 	return posts, nil
 }
 
-func (s PostRepoImpl) GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error) {
+func (s *PostRepoImpl) GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error) {
 	var posts []*model.Post
 	err := s.db.WithContext(ctx).
 		Preload("User", func(db *gorm.DB) *gorm.DB {
@@ -104,7 +108,7 @@ func (s PostRepoImpl) GetPostByUserId(ctx context.Context, userId uint64, limit,
 	return posts, nil
 }
 
-func (s PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error) {
+func (s *PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error) {
 	var posts []*model.Post
 	err := s.db.WithContext(ctx).
 		Preload("User", func(db *gorm.DB) *gorm.DB {
@@ -127,7 +131,22 @@ func (s PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, off
 	return posts, nil
 }
 
-func (s PostRepoImpl) UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia, tags []*model.PostTag) error {
+func (s *PostRepoImpl) GetPostTagNames(ctx context.Context, postId uint64) ([]string, error) {
+	var tagNames []string
+	err := s.db.WithContext(ctx).
+		Table("post_tags").
+		Select("tags.name").
+		Joins("JOIN tags ON post_tags.tag_id = tags.id").
+		Where("post_tags.post_id = ?", postId).
+		Find(&tagNames).Error
+	if err != nil {
+		return nil, err
+	}
+
+	return tagNames, nil
+}
+
+func (s *PostRepoImpl) UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostMedia{}).Error; err != nil {
 			return err
@@ -138,30 +157,45 @@ func (s PostRepoImpl) UpdatePost(ctx context.Context, post *model.Post, media []
 		if err := tx.Select("title", "content", "status", "updated_at").Updates(post).Error; err != nil {
 			return err
 		}
-		return s.createPostAssociations(tx, post.ID, media, tags)
+		return s.createPostAssociations(tx, post.ID, media)
 	})
 }
 
-func (s PostRepoImpl) DeletePost(ctx context.Context, id uint64) error {
+func (s *PostRepoImpl) UpdatePostStatus(ctx context.Context, id uint64, status int) error {
+	return s.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Update("status", status).Error
+}
+
+func (s *PostRepoImpl) DeletePost(ctx context.Context, id uint64) error {
 	return s.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Update("is_deleted", true).Error
 }
 
-func (s PostRepoImpl) createPostAssociations(tx *gorm.DB, postID uint64, media []*model.PostMedia, tags []*model.PostTag) error {
+func (s *PostRepoImpl) UpsertPostTag(ctx context.Context, postID uint64, tagName string) error {
+	var newTag model.Tag
+	err := s.db.WithContext(ctx).Select("id").Where("name = ?", tagName).First(&newTag).Error
+	if err != nil {
+		log.Warn("tag not found", "name", tagName)
+		return nil
+	}
+
+	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
+		if err = tx.Where("post_id = ?", postID).Delete(&model.PostTag{}).Error; err != nil {
+			return err
+		}
+		postTag := model.PostTag{
+			PostID: postID,
+			TagID:  newTag.ID,
+		}
+		return tx.Create(&postTag).Error
+	})
+}
+
+func (s *PostRepoImpl) createPostAssociations(tx *gorm.DB, postID uint64, media []*model.PostMedia) error {
 	if len(media) > 0 {
 		for i := range media {
 			media[i].PostID = postID
 			media[i].ID = 0
 		}
 		if err := tx.Create(media).Error; err != nil {
-			return err
-		}
-	}
-
-	if len(tags) > 0 {
-		for i := range tags {
-			tags[i].PostID = postID
-		}
-		if err := tx.Create(tags).Error; err != nil {
 			return err
 		}
 	}

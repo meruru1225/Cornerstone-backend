@@ -27,7 +27,7 @@ var (
 	ErrUserFollowSelf          = errors.New("用户不能关注自己")
 	ErrUserHasRole             = errors.New("用户已拥有此角色")
 	UnauthorizedError          = errors.New("权限不足")
-	UnExpectedError            = errors.New("未知错误")
+	UnExpectedError            = errors.New("系统异常，请稍后重试")
 )
 
 var ErrorMap = map[error]int{

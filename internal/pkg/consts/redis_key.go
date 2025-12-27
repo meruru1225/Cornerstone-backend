@@ -7,12 +7,14 @@ const (
 	UserSimpleInfoKey     = "user:simple:info:"
 	UserFollowerKey       = "user:follower:"
 	UserFollowingKey      = "user:following:"
-	UserFollowerCountKey  = "user:follow:count:"
+	UserFollowerCountKey  = "user:follower:count:"
 	UserFollowingCountKey = "user:following:count:"
+	UserFollowDirtyKey    = "user:follow:dirty:"
 	UserMetrics7DaysKey   = "user:metrics:7days:"
 	UserMetrics30DaysKey  = "user:metrics:30days:"
 )
 
 const (
+	UserDetailLock      = "user:detail:lock:"
 	UserMetricDailyLock = "user:metric:daily:lock:"
 )

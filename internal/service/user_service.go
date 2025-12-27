@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/goccy/go-json"
+	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 )
 
@@ -286,6 +287,20 @@ func (s *UserServiceImpl) SearchUser(ctx context.Context, dto *dto.SearchUserDTO
 }
 
 func (s *UserServiceImpl) UpdateUserInfo(ctx context.Context, id uint64, dto *dto.UserDTO) error {
+	newUUID, err := uuid.NewUUID()
+	if err != nil {
+		return err
+	}
+	lockKey := consts.UserDetailLock + strconv.FormatUint(id, 10)
+	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Second*5, 3)
+	if err != nil {
+		return err
+	}
+	if !lock {
+		return UnExpectedError
+	}
+	defer redis.UnLock(ctx, lockKey, newUUID.String())
+
 	user, err := s.userRepo.GetUserById(ctx, id)
 	if err != nil {
 		return err
