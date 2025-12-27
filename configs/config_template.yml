@@ -50,10 +50,10 @@ kafka:
     heartbeat_interval: 3
     rebalance_timeout: 60
 
-kafka_user_detail_consumer:
-  topic: "{{KAFKA_USER_DETAIL_TOPIC}}"
-  group_id: "{{KAFKA_USER_DETAIL_GROUP_ID}}"
+kafka_user_consumer:
+  topic: "{{KAFKA_USER_TOPIC}}"
+  group_id: "{{KAFKA_USER_GROUP_ID}}"
 
-kafka_user_follows_consumer:
-  topic: "{{KAFKA_USER_FOLLOWS_TOPIC}}"
-  group_id: "{{KAFKA_USER_FOLLOWS_GROUP_ID}}"
+kafka_post_consumer:
+  topic: "{{KAFKA_POST_TOPIC}}"
+  group_id: "{{KAFKA_POST_GROUP_ID}}"

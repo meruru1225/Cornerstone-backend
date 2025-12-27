@@ -11,6 +11,8 @@ import (
 	"github.com/goccy/go-json"
 )
 
+// TODO: 由消费Kafka变成定时任务处理，避免写放大，优化整体架构
+
 type UserFollowsConsumer struct {
 	userMetricsService service.UserMetricsService
 }

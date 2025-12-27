@@ -2,16 +2,16 @@ package config
 
 // Config 配置主体
 type Config struct {
-	Server                   ServerConfig                   `mapstructure:"server"`
-	DB                       DBConfig                       `mapstructure:"database"`
-	Redis                    RedisConfig                    `mapstructure:"redis"`
-	SMS                      SMSConfig                      `mapstructure:"sms"`
-	LLM                      LLMConfig                      `mapstructure:"llm"`
-	MinIO                    MinIOConfig                    `mapstructure:"minio"`
-	Elastic                  ElasticConfig                  `mapstructure:"elastic"`
-	Kafka                    KafkaConfig                    `mapstructure:"kafka"`
-	KafkaUserDetailConsumer  KafkaUserDetailConsumerConfig  `mapstructure:"kafka_user_detail_consumer"`
-	KafkaUserFollowsConsumer KafkaUserFollowsConsumerConfig `mapstructure:"kafka_user_follows_consumer"`
+	Server            ServerConfig      `mapstructure:"server"`
+	DB                DBConfig          `mapstructure:"database"`
+	Redis             RedisConfig       `mapstructure:"redis"`
+	SMS               SMSConfig         `mapstructure:"sms"`
+	LLM               LLMConfig         `mapstructure:"llm"`
+	MinIO             MinIOConfig       `mapstructure:"minio"`
+	Elastic           ElasticConfig     `mapstructure:"elastic"`
+	Kafka             KafkaConfig       `mapstructure:"kafka"`
+	KafkaUserConsumer KafkaUserConsumer `mapstructure:"kafka_user_consumer"`
+	KafkaPostConsumer KafkaPostConsumer `mapstructure:"kafka_post_consumer"`
 }
 
 // ServerConfig Server配置
@@ -87,12 +87,12 @@ type ConsumerConfig struct {
 	RebalanceTimeout  int `mapstructure:"rebalance_timeout"`
 }
 
-type KafkaUserDetailConsumerConfig struct {
+type KafkaUserConsumer struct {
 	Topic   string `mapstructure:"topic"`
 	GroupID string `mapstructure:"group_id"`
 }
 
-type KafkaUserFollowsConsumerConfig struct {
+type KafkaPostConsumer struct {
 	Topic   string `mapstructure:"topic"`
 	GroupID string `mapstructure:"group_id"`
 }

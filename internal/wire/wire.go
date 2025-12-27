@@ -23,13 +23,11 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userRepo := repository.NewUserRepo(db)
 	userRolesRepo := repository.NewUserRolesRepo(db)
 	userFollowRepo := repository.NewUserFollowRepo(db)
-	userMetricsRepo := repository.NewUserMetricsRepository(db)
 	roleRepo := repository.NewRoleRepository(db)
 
 	userService := service.NewUserService(userRepo, roleRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
-	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
 	smsService := service.NewSmsService()
 
 	handlers := &api.HandlersGroup{
@@ -39,7 +37,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 
 	router := api.SetupRouter(handlers)
 
-	kafkaMgr, err := kafka.NewConsumerManager(cfg, userMetricsService)
+	kafkaMgr, err := kafka.NewConsumerManager(cfg)
 	if err != nil {
 		return nil, err
 	}
