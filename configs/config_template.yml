@@ -58,9 +58,9 @@ kafka_user_detail_consumer:
   topic: "{{KAFKA_USER_DETAIL_TOPIC}}"
   group_id: "{{KAFKA_USER_DETAIL_GROUP_ID}}"
 
-kafka_user_follows_consumer:
-  topic: "{{KAFKA_USER_DETAIL_TOPIC}}"
-  group_id: "{{KAFKA_USER_DETAIL_GROUP_ID}}"
+kafka_user_follow_consumer:
+  topic: "{{KAFKA_USER_FOLLOW_TOPIC}}"
+  group_id: "{{KAFKA_USER_FOLLOW_GROUP_ID}}"
 
 kafka_post_consumer:
   topic: "{{KAFKA_POST_TOPIC}}"

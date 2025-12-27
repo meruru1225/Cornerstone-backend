@@ -2,18 +2,18 @@ package config
 
 // Config 配置主体
 type Config struct {
-	Server                   ServerConfig             `mapstructure:"server"`
-	DB                       DBConfig                 `mapstructure:"database"`
-	Redis                    RedisConfig              `mapstructure:"redis"`
-	SMS                      SMSConfig                `mapstructure:"sms"`
-	LLM                      LLMConfig                `mapstructure:"llm"`
-	MinIO                    MinIOConfig              `mapstructure:"minio"`
-	Elastic                  ElasticConfig            `mapstructure:"elastic"`
-	Kafka                    KafkaConfig              `mapstructure:"kafka"`
-	KafkaUserConsumer        KafkaUserConsumer        `mapstructure:"kafka_user_consumer"`
-	KafkaUserDetailConsumer  KafkaUserDetailConsumer  `mapstructure:"kafka_user_detail_consumer"`
-	KafkaUserFollowsConsumer KafkaUserFollowsConsumer `mapstructure:"kafka_user_follows_consumer"`
-	KafkaPostConsumer        KafkaPostConsumer        `mapstructure:"kafka_post_consumer"`
+	Server                   ServerConfig            `mapstructure:"server"`
+	DB                       DBConfig                `mapstructure:"database"`
+	Redis                    RedisConfig             `mapstructure:"redis"`
+	SMS                      SMSConfig               `mapstructure:"sms"`
+	LLM                      LLMConfig               `mapstructure:"llm"`
+	MinIO                    MinIOConfig             `mapstructure:"minio"`
+	Elastic                  ElasticConfig           `mapstructure:"elastic"`
+	Kafka                    KafkaConfig             `mapstructure:"kafka"`
+	KafkaUserConsumer        KafkaUserConsumer       `mapstructure:"kafka_user_consumer"`
+	KafkaUserDetailConsumer  KafkaUserDetailConsumer `mapstructure:"kafka_user_detail_consumer"`
+	KafkaUserFollowsConsumer KafkaUserFollowConsumer `mapstructure:"kafka_user_follow_consumer"`
+	KafkaPostConsumer        KafkaPostConsumer       `mapstructure:"kafka_post_consumer"`
 }
 
 // ServerConfig Server配置
@@ -99,7 +99,7 @@ type KafkaUserDetailConsumer struct {
 	GroupID string `mapstructure:"group_id"`
 }
 
-type KafkaUserFollowsConsumer struct {
+type KafkaUserFollowConsumer struct {
 	Topic   string `mapstructure:"topic"`
 	GroupID string `mapstructure:"group_id"`
 }
