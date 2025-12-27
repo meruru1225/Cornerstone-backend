@@ -3,6 +3,7 @@ package main
 import (
 	"Cornerstone/internal/api/config"
 	"Cornerstone/internal/pkg/database"
+	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/llm"
 	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/redis"
@@ -20,14 +21,17 @@ import (
 )
 
 func main() {
+	// 初始化日志
 	InitLogger()
 
+	// 加载配置
 	if err := config.LoadConfig(); err != nil {
 		log.Error("Fatal error: failed to load configuration", "err", err)
 		panic(err)
 	}
 	cfg := config.Cfg
 
+	// 数据库连接
 	dbCfg := cfg.DB
 	db, err := database.NewGormDB(&dbCfg)
 	if err != nil {
@@ -35,6 +39,7 @@ func main() {
 		panic(err)
 	}
 
+	// Redis 连接
 	redisCfg := config.Cfg.Redis
 	err = redis.InitRedis(redisCfg)
 	if err != nil {
@@ -42,12 +47,28 @@ func main() {
 		panic(err)
 	}
 
+	// MinIO 连接
 	err = minio.Init()
 	if err != nil {
 		log.Error("Fatal error: failed to initialize MinIO", "err", err)
 		panic(err)
 	}
 
+	// ElasticSearch 连接
+	err = es.InitClient()
+	if err != nil {
+		log.Error("Fatal error: failed to initialize ElasticSearch", "err", err)
+		panic(err)
+	}
+
+	// llm 模型初始化
+	err = llm.InitLLM()
+	if err != nil {
+		log.Error("Fatal error: failed to initialize llm models", "err", err)
+		panic(err)
+	}
+
+	// 依赖注入
 	app, err := wire.BuildApplication(db, cfg)
 	if err != nil {
 		log.Error("Fatal error: failed to create application", "err", err)
@@ -56,7 +77,6 @@ func main() {
 
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-
 	g, ctx := errgroup.WithContext(ctx)
 
 	// HTTP 服务器
@@ -64,7 +84,6 @@ func main() {
 		Addr:    ":8080",
 		Handler: app.Router,
 	}
-
 	g.Go(func() error {
 		log.Info("HTTP Server starting...")
 		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
@@ -77,12 +96,6 @@ func main() {
 	g.Go(func() error {
 		log.Info("Kafka Consumers starting...")
 		return app.KafkaManager.Start(ctx, cfg)
-	})
-
-	// llm 模型初始化
-	g.Go(func() error {
-		log.Info("LLM Models starting...")
-		return llm.InitLLM()
 	})
 
 	g.Go(func() error {

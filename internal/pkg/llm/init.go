@@ -25,7 +25,7 @@ func InitLLM() error {
 	)
 
 	if err != nil {
-		log.Error("AI大模型初始化失败", "err", err)
+		log.Error("LLM Initial Failed", "err", err)
 		return err
 	}
 
@@ -37,5 +37,6 @@ func InitLLM() error {
 	searchChatPrompt = readPrompt("./prompts/search-chat.txt")
 	chatPrompt = readPrompt("./prompts/chat.txt")
 
+	log.Info("LLM Initial Success")
 	return nil
 }

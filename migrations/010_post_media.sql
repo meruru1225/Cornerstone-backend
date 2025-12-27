@@ -8,6 +8,7 @@ CREATE TABLE `post_media`
     `sort_order`   TINYINT      NOT NULL DEFAULT 0 COMMENT '媒体在笔记中的显示顺序 (0, 1, 2...)',
     `width`        INT          NOT NULL DEFAULT 0 COMMENT '原始素材宽度 (px)',
     `height`       INT          NOT NULL DEFAULT 0 COMMENT '原始素材高度 (px)',
+    `duration`     INT          NOT NULL DEFAULT 0 COMMENT '视频/音频长度',
     `cover_url`    VARCHAR(512) DEFAULT NULL COMMENT '视频封面或图片缩略图URL',
     `created_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`   DATETIME     NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

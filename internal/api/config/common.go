@@ -8,6 +8,7 @@ type Config struct {
 	SMS                      SMSConfig                      `mapstructure:"sms"`
 	LLM                      LLMConfig                      `mapstructure:"llm"`
 	MinIO                    MinIOConfig                    `mapstructure:"minio"`
+	Elastic                  ElasticConfig                  `mapstructure:"elastic"`
 	Kafka                    KafkaConfig                    `mapstructure:"kafka"`
 	KafkaUserDetailConsumer  KafkaUserDetailConsumerConfig  `mapstructure:"kafka_user_detail_consumer"`
 	KafkaUserFollowsConsumer KafkaUserFollowsConsumerConfig `mapstructure:"kafka_user_follows_consumer"`
@@ -45,6 +46,29 @@ type LLMConfig struct {
 	ApiKey string `mapstructure:"api_key"`
 }
 
+// MinIOConfig MinIO配置
+type MinIOConfig struct {
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	UseSSL    bool   `mapstructure:"use_ssl"`
+}
+
+// ElasticConfig Elastic配置
+type ElasticConfig struct {
+	Address  string         `mapstructure:"address"`
+	Username string         `mapstructure:"username"`
+	Password string         `mapstructure:"password"`
+	Indices  ElasticIndices `mapstructure:"indices"`
+}
+
+// ElasticIndices Elastic索引
+type ElasticIndices struct {
+	UserIndex string `mapstructure:"user_index"`
+	PostIndex string `mapstructure:"post_index"`
+}
+
 type KafkaConfig struct {
 	Brokers  []string       `mapstructure:"brokers"`
 	Sasl     SaslConfig     `mapstructure:"sasl"`
@@ -71,13 +95,4 @@ type KafkaUserDetailConsumerConfig struct {
 type KafkaUserFollowsConsumerConfig struct {
 	Topic   string `mapstructure:"topic"`
 	GroupID string `mapstructure:"group_id"`
-}
-
-// MinIOConfig MinIO配置
-type MinIOConfig struct {
-	Endpoint  string `mapstructure:"endpoint"`
-	AccessKey string `mapstructure:"access_key"`
-	SecretKey string `mapstructure:"secret_key"`
-	Bucket    string `mapstructure:"bucket"`
-	UseSSL    bool   `mapstructure:"use_ssl"`
 }

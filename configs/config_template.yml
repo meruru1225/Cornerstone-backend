@@ -30,6 +30,14 @@ minio:
   bucket: "{{MINIO_BUCKET}}"
   use_ssl: false
 
+elastic:
+  address: "{{ELASTIC_ADDRESS}}"
+  username: "{{ELASTIC_USERNAME}}"
+  password: "{{ELASTIC_PASSWORD}}"
+  indices:
+    user_index: "{{ELASTIC_USER_INDEX}}"
+    post_index: "{{ELASTIC_POST_INDEX}}"
+
 kafka:
   brokers:
     - "{{KAFKA_BROKER}}"

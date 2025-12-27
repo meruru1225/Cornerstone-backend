@@ -4,6 +4,7 @@ CREATE TABLE `post_comments`
     `post_id`          BIGINT        NOT NULL COMMENT '关联的笔记ID',
     `user_id`          BIGINT        NOT NULL COMMENT '评论者ID (谁发的)',
     `content`          VARCHAR(1000) NOT NULL COMMENT '评论内容',
+    `media_info`       JSON                   DEFAULT NULL COMMENT '媒体列表JSON',
     `root_id`          BIGINT        NOT NULL DEFAULT 0 COMMENT '根评论ID (0:这是一级评论)',
     `parent_id`        BIGINT        NOT NULL DEFAULT 0 COMMENT '直接父评论ID (0:这是直接评论帖子)',
     `reply_to_user_id` BIGINT        NOT NULL DEFAULT 0 COMMENT '被回复的用户ID (0:无)',

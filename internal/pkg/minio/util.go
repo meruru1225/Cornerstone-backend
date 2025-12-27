@@ -5,7 +5,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"net/http"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -55,40 +54,4 @@ func GetPublicURL(objectName string) string {
 
 	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, BucketName, objectName)
 	return publicURL
-}
-
-// GetObjectMimeType 获取对象的MIME类型
-func GetObjectMimeType(ctx context.Context, objectName string) (string, error) {
-	if Client == nil {
-		return "", fmt.Errorf("minio client is not initialized")
-	}
-	bucket := BucketName
-
-	// 设置 GetObject 选项
-	opts := minio.GetObjectOptions{}
-	err := opts.SetRange(0, 511)
-	if err != nil {
-		return "", err
-	}
-
-	// 获取对象流
-	object, err := Client.GetObject(ctx, bucket, objectName, opts)
-	if err != nil {
-		return "", err
-	}
-	defer func(object *minio.Object) {
-		_ = object.Close()
-	}(object)
-
-	// 3读取头部字节
-	buffer := make([]byte, 512)
-	n, err := object.Read(buffer)
-	if err != nil && err.Error() != "EOF" {
-		return "", err
-	}
-
-	// 分析内容
-	contentType := http.DetectContentType(buffer[:n])
-
-	return contentType, nil
 }

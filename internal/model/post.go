@@ -18,10 +18,8 @@ type Post struct {
 	UpdatedAt     time.Time `json:"updatedAt"`
 
 	// 关联关系
-	User     User          `gorm:"foreignKey:UserID;references:ID"`
-	Media    []PostMedia   `gorm:"foreignKey:PostID;references:ID"`
-	Tags     []Tag         `gorm:"many2many:post_tags"`
-	Comments []PostComment `gorm:"foreignKey:PostID;references:ID"`
+	User  User        `gorm:"foreignKey:UserID;references:ID"`
+	Media []PostMedia `gorm:"foreignKey:PostID;references:ID"`
 }
 
 func (Post) TableName() string {

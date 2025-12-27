@@ -26,6 +26,7 @@ var (
 	ErrUserFollowLimit         = errors.New("用户关注数量超过限制")
 	ErrUserFollowSelf          = errors.New("用户不能关注自己")
 	ErrUserHasRole             = errors.New("用户已拥有此角色")
+	UnauthorizedError          = errors.New("权限不足")
 	UnExpectedError            = errors.New("未知错误")
 )
 
