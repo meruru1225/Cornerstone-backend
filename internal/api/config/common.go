@@ -1,0 +1,83 @@
+package config
+
+// Config 配置主体
+type Config struct {
+	Server                   ServerConfig                   `mapstructure:"server"`
+	DB                       DBConfig                       `mapstructure:"database"`
+	Redis                    RedisConfig                    `mapstructure:"redis"`
+	SMS                      SMSConfig                      `mapstructure:"sms"`
+	LLM                      LLMConfig                      `mapstructure:"llm"`
+	MinIO                    MinIOConfig                    `mapstructure:"minio"`
+	Kafka                    KafkaConfig                    `mapstructure:"kafka"`
+	KafkaUserDetailConsumer  KafkaUserDetailConsumerConfig  `mapstructure:"kafka_user_detail_consumer"`
+	KafkaUserFollowsConsumer KafkaUserFollowsConsumerConfig `mapstructure:"kafka_user_follows_consumer"`
+}
+
+// ServerConfig Server配置
+type ServerConfig struct {
+	Port int `mapstructure:"port"`
+}
+
+// DBConfig 数据库配置
+type DBConfig struct {
+	DSN         string `mapstructure:"dsn"`
+	MaxIdle     int    `mapstructure:"max_idle"`
+	MaxOpen     int    `mapstructure:"max_open"`
+	MaxLifetime int    `mapstructure:"max_lifetime"`
+}
+
+type RedisConfig struct {
+	Addr     string `mapstructure:"addr"`
+	Password string `mapstructure:"password"`
+	DB       int    `mapstructure:"db"`
+	PoolSize int    `mapstructure:"pool_size"`
+}
+
+type SMSConfig struct {
+	URL      string `mapstructure:"url"`
+	Username string `mapstructure:"username"`
+	ApiKey   string `mapstructure:"api_key"`
+}
+
+type LLMConfig struct {
+	URL    string `mapstructure:"url"`
+	Model  string `mapstructure:"model"`
+	ApiKey string `mapstructure:"api_key"`
+}
+
+type KafkaConfig struct {
+	Brokers  []string       `mapstructure:"brokers"`
+	Sasl     SaslConfig     `mapstructure:"sasl"`
+	Consumer ConsumerConfig `mapstructure:"consumer"`
+}
+
+type SaslConfig struct {
+	Enable   bool   `mapstructure:"enable"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+}
+
+type ConsumerConfig struct {
+	SessionTimeout    int `mapstructure:"session_timeout"`
+	HeartbeatInterval int `mapstructure:"heartbeat_interval"`
+	RebalanceTimeout  int `mapstructure:"rebalance_timeout"`
+}
+
+type KafkaUserDetailConsumerConfig struct {
+	Topic   string `mapstructure:"topic"`
+	GroupID string `mapstructure:"group_id"`
+}
+
+type KafkaUserFollowsConsumerConfig struct {
+	Topic   string `mapstructure:"topic"`
+	GroupID string `mapstructure:"group_id"`
+}
+
+// MinIOConfig MinIO配置
+type MinIOConfig struct {
+	Endpoint  string `mapstructure:"endpoint"`
+	AccessKey string `mapstructure:"access_key"`
+	SecretKey string `mapstructure:"secret_key"`
+	Bucket    string `mapstructure:"bucket"`
+	UseSSL    bool   `mapstructure:"use_ssl"`
+}

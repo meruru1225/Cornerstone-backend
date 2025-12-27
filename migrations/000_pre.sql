@@ -1,0 +1,23 @@
+DROP DATABASE IF EXISTS corner_stone;
+CREATE DATABASE corner_stone;
+USE corner_stone;
+
+DROP TABLE IF EXISTS users;
+DROP TABLE IF EXISTS user_details;
+DROP TABLE IF EXISTS roles;
+DROP TABLE IF EXISTS user_roles;
+DROP TABLE IF EXISTS tags;
+DROP TABLE IF EXISTS user_tags;
+DROP TABLE IF EXISTS user_follows;
+DROP TABLE IF EXISTS user_daily_metrics;
+DROP TABLE IF EXISTS posts;
+DROP TABLE IF EXISTS post_media;
+DROP TABLE IF EXISTS post_tags;
+DROP TABLE IF EXISTS post_likes;
+DROP TABLE IF EXISTS post_collections;
+DROP TABLE IF EXISTS post_comments;
+DROP TABLE IF EXISTS comment_likes;
+DROP TABLE IF EXISTS post_views;
+DROP TABLE IF EXISTS post_daily_metrics;
+DROP TABLE IF EXISTS user_content_daily_metrics;
+DROP TABLE IF EXISTS conversations;

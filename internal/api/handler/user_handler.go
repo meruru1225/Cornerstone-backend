@@ -1,0 +1,417 @@
+package handler
+
+import (
+	"Cornerstone/internal/api/dto"
+	"Cornerstone/internal/model"
+	"Cornerstone/internal/pkg/minio"
+	"Cornerstone/internal/pkg/response"
+	"Cornerstone/internal/pkg/util"
+	"Cornerstone/internal/service"
+	"errors"
+	"strconv"
+	"strings"
+
+	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
+)
+
+type UserHandler struct {
+	userSvc      service.UserService
+	userRolesSvc service.UserRolesService
+	smsSvc       service.SmsService
+}
+
+func NewUserHandler(userSvc service.UserService, userRolesSvc service.UserRolesService, smsSvc service.SmsService) *UserHandler {
+	return &UserHandler{
+		userSvc:      userSvc,
+		userRolesSvc: userRolesSvc,
+		smsSvc:       smsSvc,
+	}
+}
+
+func (s *UserHandler) Register(c *gin.Context) {
+	var registerDTO dto.RegisterDTO
+	err := c.ShouldBind(&registerDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	if !util.ValidateRegDTO(&registerDTO) {
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		return
+	}
+	err = s.userSvc.Register(c.Request.Context(), &registerDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) SendSmsCode(c *gin.Context) {
+	phone := c.Query("phone")
+	err := s.smsSvc.SendSms(c.Request.Context(), phone)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) Login(c *gin.Context) {
+	var loginDTO dto.CredentialDTO
+	err := c.ShouldBind(&loginDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	if !util.ValidateLoginDTO(&loginDTO) {
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		return
+	}
+	token, err := s.userSvc.Login(c.Request.Context(), &loginDTO, true)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, map[string]string{
+		"token":   token,
+		"user_id": strconv.FormatUint(c.GetUint64("user_id"), 10),
+	})
+}
+
+func (s *UserHandler) LoginByPhone(c *gin.Context) {
+	phone := c.Query("phone")
+	code := c.Query("code")
+	token, err := s.smsSvc.CheckCode(c.Request.Context(), phone, code)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	loginDTO := dto.CredentialDTO{
+		Phone: &phone,
+	}
+	loginToken, err := s.userSvc.Login(c.Request.Context(), &loginDTO, false)
+	isReg := false
+	if err != nil && !errors.Is(err, service.ErrUserNotFound) {
+		response.Fail(c, response.InternalServerError, err.Error())
+		return
+	}
+	if !errors.Is(err, service.ErrUserNotFound) {
+		_ = s.smsSvc.DelSmsRegToken(c.Request.Context(), phone)
+		token = loginToken
+		isReg = true
+	}
+	response.Success(c, map[string]any{
+		"token":   token,
+		"user_id": strconv.FormatUint(c.GetUint64("user_id"), 10),
+		"is_reg":  isReg,
+	})
+}
+
+func (s *UserHandler) ChangeUsername(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	var changeUsernameDTO dto.ChangeUsernameDTO
+	err := c.ShouldBind(&changeUsernameDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = util.ValidateDTO(&changeUsernameDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.UpdateUsername(c.Request.Context(), userID, &changeUsernameDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) ChangePassword(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	var changePasswordDTO dto.ChangePasswordDTO
+	err := c.ShouldBind(&changePasswordDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = util.ValidateDTO(&changePasswordDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.UpdatePasswordFromOld(c.Request.Context(), userID, &changePasswordDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) ForgetPassword(c *gin.Context) {
+	var forgetPasswordDTO dto.ForgetPasswordDTO
+	err := c.ShouldBind(&forgetPasswordDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = util.ValidateDTO(&forgetPasswordDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.UpdatePasswordFromToken(c.Request.Context(), &forgetPasswordDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) ChangePhone(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	var changePhoneDTO dto.ChangePhoneDTO
+	err := c.ShouldBind(&changePhoneDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = util.ValidateDTO(&changePhoneDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.UpdatePhone(c.Request.Context(), userID, &changePhoneDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) Logout(c *gin.Context) {
+	token := c.Request.Header.Get("Authorization")
+	token = strings.Replace(token, "Bearer ", "", 1)
+	err := s.userSvc.Logout(c.Request.Context(), token)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) GetUserInfo(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	userDTO, err := s.userSvc.GetUserInfo(c.Request.Context(), userID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, userDTO)
+}
+
+func (s *UserHandler) UpdateUserInfo(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	var userDTO dto.UserDTO
+	err := c.ShouldBind(&userDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	userDTO.UserID = nil
+	userDTO.Phone = nil
+	userDTO.AvatarURL = nil
+	userDTO.CreatedAt = nil
+	err = util.ValidateDTO(&userDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.UpdateUserInfo(c.Request.Context(), userID, &userDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) BanUser(c *gin.Context) {
+	userIDStr := c.Query("user_id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.BanUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) UnbanUser(c *gin.Context) {
+	userIDStr := c.Query("user_id")
+	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userSvc.UnBanUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) CancelUser(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	err := s.userSvc.CancelUser(c.Request.Context(), userID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) SearchUser(c *gin.Context) {
+	var searchUserDTO dto.SearchUserDTO
+	err := c.ShouldBind(&searchUserDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	if searchUserDTO.ID == nil && searchUserDTO.Phone == nil && searchUserDTO.Username == nil && searchUserDTO.Nickname == nil {
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		return
+	}
+	users, err := s.userSvc.SearchUser(c.Request.Context(), &searchUserDTO)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, users)
+}
+
+func (s *UserHandler) AddUserRole(c *gin.Context) {
+	var userRole model.UserRole
+	err := c.ShouldBind(&userRole)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userRolesSvc.AddRoleToUser(c.Request.Context(), userRole.UserID, userRole.RoleID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) DeleteUserRole(c *gin.Context) {
+	var userRole model.UserRole
+	err := c.ShouldBind(&userRole)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	err = s.userRolesSvc.DeleteRoleFromUser(c.Request.Context(), userRole.UserID, userRole.RoleID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}
+
+func (s *UserHandler) GetHomeInfo(c *gin.Context) {
+	query := c.Query("user_id")
+	userID, err := strconv.ParseUint(query, 10, 64)
+	user, err := s.userSvc.GetUserHomeInfoById(c.Request.Context(), userID)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, user)
+}
+
+func (s *UserHandler) GetUserSimpleInfoById(c *gin.Context) {
+	query := c.Query("user_id")
+	userID, err := strconv.ParseUint(query, 10, 64)
+	user, err := s.userSvc.GetUserSimpleInfoByIds(c.Request.Context(), []uint64{userID})
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	if len(user) == 0 {
+		response.Fail(c, response.NotFound, service.ErrUserNotFound.Error())
+		return
+	}
+	response.Success(c, user[0])
+}
+
+func (s *UserHandler) GetUserSimpleInfoByIds(c *gin.Context) {
+	query := c.Query("user_ids")
+	if query == "" {
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		return
+	}
+	query = query[1 : len(query)-1]
+	userIDs := strings.Split(query, ",")
+	userIDsUint64 := make([]uint64, 0, len(userIDs))
+	for _, userID := range userIDs {
+		userIDUint64, err := strconv.ParseUint(userID, 10, 64)
+		if err != nil {
+			response.ProcessError(c, err)
+			return
+		}
+		userIDsUint64 = append(userIDsUint64, userIDUint64)
+	}
+	userDTOList, err := s.userSvc.GetUserSimpleInfoByIds(c.Request.Context(), userIDsUint64)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, userDTOList)
+}
+
+func (s *UserHandler) UploadAvatar(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	file, err := c.FormFile("file")
+	if err != nil || file == nil {
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		return
+	}
+
+	contentType := file.Header.Get("Content-Type")
+	if contentType != "image/jpeg" && contentType != "image/png" {
+		c.JSON(400, gin.H{"error": "仅支持 JPG/PNG 格式"})
+		return
+	}
+
+	reader, err := file.Open()
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	defer func() {
+		_ = reader.Close()
+	}()
+
+	UUID, err := uuid.NewUUID()
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	path, err := minio.UploadFile(c.Request.Context(), UUID.String(), reader, file.Size, contentType)
+
+	err = s.userSvc.UpdateAvatar(c.Request.Context(), userID, path)
+	if err != nil {
+		response.ProcessError(c, err)
+		return
+	}
+	response.Success(c, nil)
+}

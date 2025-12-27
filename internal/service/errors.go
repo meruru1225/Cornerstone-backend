@@ -1,0 +1,48 @@
+package service
+
+import (
+	"errors"
+)
+
+const (
+	BadRequest          = 400
+	Unauthorized        = 401
+	NotFound            = 404
+	InternalServerError = 500
+)
+
+var (
+	ErrParamInvalid            = errors.New("参数错误")
+	ErrUserNotFound            = errors.New("用户不存在")
+	ErrUserExist               = errors.New("用户已存在")
+	ErrUserPhoneNotFound       = errors.New("手机号未注册")
+	ErrUserPhoneExist          = errors.New("手机号已注册")
+	ErrUserUsernameExist       = errors.New("用户名已存在")
+	ErrPasswordIncorrect       = errors.New("密码错误")
+	ErrCodeIncorrect           = errors.New("验证码错误")
+	ErrMissingLoginCredentials = errors.New("缺少登录凭据")
+	ErrSmsRegTokenIncorrect    = errors.New("短信注册token错误")
+	ErrUserFollowExist         = errors.New("用户已关注")
+	ErrUserFollowLimit         = errors.New("用户关注数量超过限制")
+	ErrUserFollowSelf          = errors.New("用户不能关注自己")
+	ErrUserHasRole             = errors.New("用户已拥有此角色")
+	UnExpectedError            = errors.New("未知错误")
+)
+
+var ErrorMap = map[error]int{
+	ErrParamInvalid:            BadRequest,
+	ErrUserNotFound:            NotFound,
+	ErrUserExist:               BadRequest,
+	ErrUserPhoneNotFound:       NotFound,
+	ErrUserPhoneExist:          BadRequest,
+	ErrUserUsernameExist:       BadRequest,
+	ErrPasswordIncorrect:       Unauthorized,
+	ErrCodeIncorrect:           Unauthorized,
+	ErrMissingLoginCredentials: Unauthorized,
+	ErrSmsRegTokenIncorrect:    Unauthorized,
+	ErrUserFollowExist:         BadRequest,
+	ErrUserFollowLimit:         BadRequest,
+	ErrUserFollowSelf:          BadRequest,
+	ErrUserHasRole:             BadRequest,
+	UnExpectedError:            InternalServerError,
+}

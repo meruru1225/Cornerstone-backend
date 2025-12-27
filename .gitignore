@@ -1,0 +1,26 @@
+/configs/config.yml
+
+# === Go 相关 ===
+# 二进制编译输出
+bin/
+# 常见的编译结果后缀
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+# 测试覆盖率文件
+*.out
+*.test
+# 依赖管理工具
+vendor/
+
+# === GoLand / JetBrains IDE 相关 ===
+.idea/
+*.iml
+*.iws
+*.ipr
+
+# === 调试/日志相关 ===
+*.log
+__debug_bin

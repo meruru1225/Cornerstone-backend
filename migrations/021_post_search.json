@@ -1,0 +1,55 @@
+{
+  "settings": {
+    "index": {
+      "number_of_shards": 3,
+      "number_of_replicas": 1,
+      "analysis": {
+        "analyzer": {
+          "default": {
+            "type": "ik_max_word"
+          }
+        }
+      }
+    }
+  },
+  "mappings": {
+    "properties": {
+      "id": { "type": "long" },
+      "user_id": { "type": "long" },
+      "status": { "type": "integer" },
+      "title": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart",
+        "fields": {
+          "keyword": { "type": "keyword" },
+          "suggestion": {
+            "type": "completion",
+            "analyzer": "ik_max_word"
+          }
+        }
+      },
+      "content": {
+        "type": "text",
+        "analyzer": "ik_max_word",
+        "search_analyzer": "ik_smart"
+      },
+      "tags": {
+        "type": "keyword"
+      },
+      "cover_url": {
+        "type": "keyword",
+        "index": false,
+        "doc_values": false
+      },
+      "media_type": { "type": "integer" },
+      "likes_count": { "type": "integer" },
+      "comments_count": { "type": "integer" },
+      "collects_count": { "type": "integer" },
+      "user_nickname": { "type": "keyword", "index": false },
+      "user_avatar": { "type": "keyword", "index": false },
+      "is_deleted": { "type": "boolean" },
+      "created_at": { "type": "date" }
+    }
+  }
+}

@@ -1,0 +1,51 @@
+server:
+  port: 8080
+
+database:
+  dsn: "{{DB_DSN}}"
+  max_idle: 30
+  max_open: 25
+  max_lifetime: 10
+
+redis:
+  addr: "{{REDIS_ADDR}}"
+  password: "{{REDIS_PASSWORD}}"
+  db: 0
+  pool_size: 10
+
+sms:
+  url: "{{SMS_URL}}"
+  username: "{{SMS_USERNAME}}"
+  api_key: "{{SMS_API_KEY}}"
+
+llm:
+  url: "{{LLM_URL}}"
+  model: "{{LLM_MODEL}}"
+  api_key: "{{LLM_API_KEY}}"
+
+minio:
+  endpoint: "{{MINIO_ENDPOINT}}"
+  access_key: "{{MINIO_ACCESS_KEY}}"
+  secret_key: "{{MINIO_SECRET_KEY}}"
+  bucket: "{{MINIO_BUCKET}}"
+  use_ssl: false
+
+kafka:
+  brokers:
+    - "{{KAFKA_BROKER}}"
+  sasl:
+    enable: true
+    username: "{{KAFKA_SASL_USERNAME}}"
+    password: "{{KAFKA_SASL_PASSWORD}}"
+  consumer:
+    session_timeout: 10
+    heartbeat_interval: 3
+    rebalance_timeout: 60
+
+kafka_user_detail_consumer:
+  topic: "{{KAFKA_USER_DETAIL_TOPIC}}"
+  group_id: "{{KAFKA_USER_DETAIL_GROUP_ID}}"
+
+kafka_user_follows_consumer:
+  topic: "{{KAFKA_USER_FOLLOWS_TOPIC}}"
+  group_id: "{{KAFKA_USER_FOLLOWS_GROUP_ID}}"
