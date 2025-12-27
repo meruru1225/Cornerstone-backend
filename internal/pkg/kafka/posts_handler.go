@@ -58,6 +58,12 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	if err != nil {
 		return err
 	}
+
+	flag := s.checkContentIsChange(canalMsg)
+	if flag {
+		return nil
+	}
+
 	post, err := s.toESModel(canalMsg)
 	if err != nil {
 		return err
@@ -117,7 +123,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	}
 	defer redis.UnLock(ctx, lockKey, newUUID.String())
 
-	users, err := s.userDBRepo.GetUserSimpleInfoByIds(ctx, []uint64{StrToUint64(msg.Key)})
+	users, err := s.userDBRepo.GetUserSimpleInfoByIds(ctx, []uint64{post.UserID})
 	if err != nil {
 		return err
 	}
@@ -156,4 +162,17 @@ func (s *PostsHandler) toESModel(message *CanalMessage) (*es.PostES, error) {
 		CommentsCount: StrToInt(row["comments_count"]),
 		CollectsCount: StrToInt(row["collects_count"]),
 	}, nil
+}
+
+func (s *PostsHandler) checkContentIsChange(message *CanalMessage) bool {
+	if message.Type == INSERT {
+		return true
+	}
+	if len(message.Old) == 0 {
+		return true
+	}
+	row := message.Old[0]
+	_, titleChanged := row["title"]
+	_, contentChanged := row["content"]
+	return titleChanged || contentChanged
 }
