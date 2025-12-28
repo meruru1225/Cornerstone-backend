@@ -10,20 +10,20 @@ import (
 
 const (
 	ContentSafePass = iota + 1
-	ContentSafeDeny
 	ContentSafeWarn
+	ContentSafeDeny
 
 	ContentSafePassStr = "1"
-	ContentSafeDenyStr = "2"
-	ContentSafeWarnStr = "3"
+	ContentSafeWarnStr = "2"
+	ContentSafeDenyStr = "3"
 
 	ContentSensitive = "sensitive"
 )
 
 var mapContentSafe = map[string]int{
 	ContentSafePassStr: ContentSafePass,
-	ContentSafeDenyStr: ContentSafeDeny,
 	ContentSafeWarnStr: ContentSafeWarn,
+	ContentSafeDenyStr: ContentSafeDeny,
 }
 
 var setMainTag = map[string]bool{
