@@ -105,6 +105,15 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 
 	// 没有内容变更，直接覆写ES
 	if !s.checkContentIsChange(canalMsg) {
+		getById, err := s.postESRepo.GetPostById(ctx, post.ID)
+		if err != nil {
+			return err
+		}
+		if getById != nil {
+			post.UserTags = getById.UserTags
+			post.AITags = getById.AITags
+			post.Status = getById.Status
+		}
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
 
@@ -112,11 +121,43 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		Title:   post.Title,
 		Content: post.Content,
 	}
-	// LLM 审查， 修改审核状态
-	contentSafe, err := llm.ContentSafe(ctx, toLLMContent)
-	if err != nil {
-		return err
+
+	// LLM 获取标签
+	g, gCtx := errgroup.WithContext(ctx)
+	g.Go(func() error {
+		classify, err := llm.ContentClassify(gCtx, toLLMContent)
+		if err != nil {
+			return err
+		}
+		if classify != nil {
+			if classify.MainTag != "" {
+				err = s.postDBRepo.UpsertPostTag(gCtx, post.ID, classify.MainTag)
+				if err != nil {
+					return err
+				}
+			}
+			if len(classify.Tags) > 0 {
+				post.AITags = classify.Tags
+			}
+		}
+		return nil
+	})
+
+	// 获取用户设定的标签
+	tags := util.ExtractTags(post.Content)
+	if len(tags) > 0 {
+		post.UserTags = tags
 	}
+
+	// LLM 审查， 修改审核状态
+	var contentSafe int
+	g.Go(func() error {
+		contentSafe, err = llm.ContentSafe(ctx, toLLMContent)
+		if err != nil {
+			return err
+		}
+		return nil
+	})
 	mediaSafe, err := s.auditMedia(ctx, medias)
 	var safe int
 	if contentSafe > mediaSafe {
@@ -129,29 +170,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return err
 	}
 
-	// LLM 获取标签
-	classify, err := llm.ContentClassify(ctx, toLLMContent)
-	if err != nil {
-		return err
-	}
-	if classify != nil {
-		if classify.MainTag != "" {
-			err = s.postDBRepo.UpsertPostTag(ctx, post.ID, classify.MainTag)
-			if err != nil {
-				return err
-			}
-		}
-		if len(classify.Tags) > 0 {
-			post.AITags = classify.Tags
-		}
-	}
-
-	// 获取用户设定的标签
-	tags := util.ExtractTags(post.Content)
-	if len(tags) > 0 {
-		post.UserTags = tags
-	}
-
+	post.Status = safe
 	return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 }
 
@@ -214,7 +233,8 @@ func (s *PostsHandler) checkOnlyStatusChange(message *CanalMessage) bool {
 	}
 	row := message.Old[0]
 	_, statusChanged := row["status"]
-	return statusChanged && len(row) == 1
+	_, updateAtChanged := row["updated_at"]
+	return statusChanged && updateAtChanged && len(row) == 2
 }
 
 func (s *PostsHandler) checkContentIsChange(message *CanalMessage) bool {
@@ -287,12 +307,13 @@ func (s *PostsHandler) collectAllFeatures(ctx context.Context, media []*model.Po
 func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, m *model.PostMedia, res *auditResults) error {
 	// 视觉特征提取任务
 	g.Go(func() error {
-		duration, err := util.GetDuration(ctx, m.MediaURL)
+		url := minio.GetInternalFileURL(m.MediaURL)
+		duration, err := util.GetDuration(ctx, url)
 		if err != nil || duration > 15*60 {
 			return err
 		} // 超过15分钟策略
 
-		frames, err := util.GetImageFrames(ctx, m.MediaURL, duration)
+		frames, err := util.GetImageFrames(ctx, url, duration)
 		if err != nil {
 			return err
 		}
@@ -322,7 +343,8 @@ func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, 
 
 	// 音频特征提取与即时审计任务
 	g.Go(func() error {
-		audio, err := util.GetAudioStream(ctx, m.MediaURL)
+		url := minio.GetInternalFileURL(m.MediaURL)
+		audio, err := util.GetAudioStream(ctx, url)
 		if err != nil {
 			return err
 		}
@@ -336,14 +358,14 @@ func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, 
 			return err
 		}
 
-		text, err := util.AudioStreamToText(ctx, minio.GetTempFileURL(fileName, true))
+		text, err := util.AudioStreamToText(ctx, minio.GetTempFileURL(fileName, false))
 		if err != nil {
 			return err
 		}
 
 		safe, err := llm.ContentSafe(ctx, &llm.Content{Content: text})
 		if err == nil {
-			s.updateMaxStatus(&res.maxStatus, int32(safe)) // 更新音频审计状态
+			s.updateMaxStatus(&res.maxStatus, int32(safe))
 		}
 		return err
 	})
@@ -352,7 +374,8 @@ func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, 
 
 func (s *PostsHandler) processAudioItem(ctx context.Context, g *errgroup.Group, m *model.PostMedia, res *auditResults) error {
 	g.Go(func() error {
-		text, err := util.AudioStreamToText(ctx, m.MediaURL)
+		url := minio.GetInternalFileURL(m.MediaURL)
+		text, err := util.AudioStreamToText(ctx, url)
 		if err != nil {
 			return err
 		}

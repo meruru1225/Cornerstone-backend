@@ -136,7 +136,7 @@ func (s *PostRepoImpl) GetPostMedias(ctx context.Context, postId uint64) ([]*mod
 	var medias []*model.PostMedia
 
 	err := s.db.WithContext(ctx).
-		Select("id", "url", "media_type").
+		Select("id", "media_url", "file_type", "sort_order", "width", "height", "duration").
 		Where("post_id = ?", postId).
 		Order("sort_order ASC").
 		Find(&medias).Error

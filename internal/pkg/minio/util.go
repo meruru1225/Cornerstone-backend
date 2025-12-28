@@ -65,6 +65,13 @@ func GetPublicURL(objectName string) string {
 	return publicURL
 }
 
+func GetInternalFileURL(objectName string) string {
+	cfg := config.Cfg.MinIO
+	safeObjectName := url.PathEscape(objectName)
+	internalURL := fmt.Sprintf("http://%s/%s/%s", cfg.InternalEndpoint, MainBucket, safeObjectName)
+	return internalURL
+}
+
 // GetTempFileURL 获取临时文件的公共访问URL
 func GetTempFileURL(objectName string, external bool) string {
 	cfg := config.Cfg.MinIO

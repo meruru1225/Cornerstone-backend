@@ -45,25 +45,26 @@ var setMainTag = map[string]bool{
 func ContentSafe(ctx context.Context, content *Content) (int, error) {
 	contentJSON, err := json.Marshal(content)
 	if err != nil {
-		log.Error("AI大模型请求数据序列化失败", "err", err)
+		log.Error("内容安全-AI大模型请求数据序列化失败", "err", err)
 		return ContentSafeWarn, err
 	}
 
 	resp, err := fetchModel(ctx, contentSafePrompt, string(contentJSON), 0.1)
 
 	if err != nil {
-		log.Error("AI大模型请求失败", "err", err)
+		log.Error("内容安全-AI大模型请求失败", "err", err)
 		return ContentSafeWarn, err
 	}
 
-	log.Info("AI大模型请求成功", "resp", resp)
+	log.Info("内容安全-AI大模型请求成功", "resp", resp)
 
 	if len(resp.Choices) > 0 {
 		if resp.Choices[0].StopReason == ContentSensitive {
 			return ContentSafeDeny, nil
 		}
 
-		safe := mapContentSafe[resp.Choices[0].Content]
+		respContent := strings.TrimSpace(resp.Choices[0].Content)
+		safe := mapContentSafe[respContent]
 		// AI 没有成功返回，默认为警告，进入人工审核
 		if safe == 0 {
 			return ContentSafeWarn, nil
@@ -83,12 +84,21 @@ func ImageSafe(ctx context.Context, urls []string) (int, error) {
 	}
 	resp, err := fetchModelByPicUrls(ctx, imageSafePrompt, urls, 0.1)
 	if err != nil {
-		log.Error("AI大模型请求失败", "err", err)
+		log.Error("图像安全-AI大模型请求失败", "err", err)
 		return ContentSafeWarn, err
 	}
+
+	log.Info("图像安全-AI大模型请求成功", "resp", resp)
+
 	if len(resp.Choices) > 0 {
-		safe := mapContentSafe[resp.Choices[0].Content]
+		if resp.Choices[0].StopReason == ContentSensitive {
+			return ContentSafeDeny, nil
+		}
+
+		respContent := strings.TrimSpace(resp.Choices[0].Content)
+		safe := mapContentSafe[respContent]
 		if safe == 0 {
+			log.Error("图像安全-AI大模型返回数据解析失败")
 			return ContentSafeWarn, nil
 		}
 		return safe, nil
@@ -99,18 +109,18 @@ func ImageSafe(ctx context.Context, urls []string) (int, error) {
 func ContentClassify(ctx context.Context, content *Content) (*ClassifyMessage, error) {
 	contentJSON, err := json.Marshal(content)
 	if err != nil {
-		log.Error("AI大模型请求数据序列化失败", "err", err)
+		log.Error("内容分类-AI大模型请求数据序列化失败", "err", err)
 		return nil, err
 	}
 
 	resp, err := fetchModel(ctx, contentClassifyPrompt, string(contentJSON), 0.1)
 
 	if err != nil {
-		log.Error("AI大模型请求失败", "err", err)
+		log.Error("内容分类-AI大模型请求失败", "err", err)
 		return nil, err
 	}
 
-	log.Info("AI大模型请求成功", "resp", resp)
+	log.Info("内容分类-AI大模型请求成功", "resp", resp)
 
 	if len(resp.Choices) > 0 {
 		classifyMessage := &ClassifyMessage{}
@@ -120,7 +130,7 @@ func ContentClassify(ctx context.Context, content *Content) (*ClassifyMessage, e
 		cleaned = strings.TrimSuffix(cleaned, "```")
 		err = json.Unmarshal([]byte(cleaned), classifyMessage)
 		if err != nil {
-			log.Error("AI大模型返回数据解析失败", "err", err)
+			log.Error("内容分类-AI大模型返回数据解析失败", "err", err)
 			return nil, err
 		}
 

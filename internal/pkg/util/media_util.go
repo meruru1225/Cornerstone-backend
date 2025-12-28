@@ -7,7 +7,9 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"os"
 	"os/exec"
+	"path/filepath"
 	"strconv"
 	"strings"
 
@@ -16,7 +18,7 @@ import (
 
 // GetDuration 获取视频时长
 func GetDuration(ctx context.Context, mediaUrl string) (float64, error) {
-	ffprobePath := config.Cfg.LibPath.FFprobe
+	ffprobePath := getLibPath(config.Cfg.LibPath.FFprobe)
 
 	cmd := exec.CommandContext(ctx, ffprobePath,
 		"-v", "error",
@@ -35,7 +37,7 @@ func GetDuration(ctx context.Context, mediaUrl string) (float64, error) {
 
 // GetAudioStream 获取视频的音频流
 func GetAudioStream(ctx context.Context, mediaUrl string) (io.ReadCloser, error) {
-	ffmpegPath := config.Cfg.LibPath.FFmpeg
+	ffmpegPath := getLibPath(config.Cfg.LibPath.FFmpeg)
 	cmd := exec.CommandContext(ctx, ffmpegPath,
 		"-i", mediaUrl,
 		"-vn",
@@ -60,7 +62,7 @@ func GetAudioStream(ctx context.Context, mediaUrl string) (io.ReadCloser, error)
 
 // GetImageFrames 获取视频帧
 func GetImageFrames(ctx context.Context, mediaUrl string, duration float64) ([]io.Reader, error) {
-	ffmpegPath := config.Cfg.LibPath.FFmpeg
+	ffmpegPath := getLibPath(config.Cfg.LibPath.FFmpeg)
 	fps := 5.0 / duration
 
 	cmd := exec.CommandContext(ctx, ffmpegPath,
@@ -99,9 +101,9 @@ func GetImageFrames(ctx context.Context, mediaUrl string, duration float64) ([]i
 
 // AudioStreamToText 将音频流转换为文本
 func AudioStreamToText(ctx context.Context, mediaUrl string) (string, error) {
-	ffmpegPath := config.Cfg.LibPath.FFmpeg
-	whisperPath := config.Cfg.LibPath.Whisper
-	modelPath := config.Cfg.LibPath.WhisperModel
+	ffmpegPath := getLibPath(config.Cfg.LibPath.FFmpeg)
+	whisperPath := getLibPath(config.Cfg.LibPath.Whisper)
+	modelPath := getLibPath(config.Cfg.LibPath.WhisperModel)
 
 	// FFmpeg 从 URL 获取音频并输出标准 16kHz WAV 管道流
 	ffmpegCmd := exec.CommandContext(ctx, ffmpegPath,
@@ -170,4 +172,13 @@ func splitJPEG(data []byte, atEOF bool) (advance int, token []byte, err error) {
 		return len(data), data, nil
 	}
 	return 0, nil, nil
+}
+
+func getLibPath(path string) string {
+	root := os.Getenv("PROJECT_ROOT")
+	if root == "" {
+		root, _ = os.Getwd()
+		root = filepath.Dir(filepath.Dir(root))
+	}
+	return filepath.Join(root, path)
 }

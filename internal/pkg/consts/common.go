@@ -1,7 +1,7 @@
 package consts
 
 const (
-	MimePrefixImage = "image/"
-	MimePrefixAudio = "audio/"
-	MimePrefixVideo = "video/"
+	MimePrefixImage = "image"
+	MimePrefixAudio = "audio"
+	MimePrefixVideo = "video"
 )
