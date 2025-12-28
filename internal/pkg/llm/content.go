@@ -42,14 +42,14 @@ var setMainTag = map[string]bool{
 	"其他内容": true,
 }
 
-func ContentSafe(ctx context.Context, post *Post) (int, error) {
-	postJson, err := json.Marshal(post)
+func ContentSafe(ctx context.Context, content *Content) (int, error) {
+	contentJSON, err := json.Marshal(content)
 	if err != nil {
 		log.Error("AI大模型请求数据序列化失败", "err", err)
 		return ContentSafeWarn, err
 	}
 
-	resp, err := fetchModel(ctx, contentSafePrompt, string(postJson), 0.1)
+	resp, err := fetchModel(ctx, contentSafePrompt, string(contentJSON), 0.1)
 
 	if err != nil {
 		log.Error("AI大模型请求失败", "err", err)
@@ -96,14 +96,14 @@ func ImageSafe(ctx context.Context, urls []string) (int, error) {
 	return ContentSafeWarn, nil
 }
 
-func ContentClassify(ctx context.Context, post *Post) (*ClassifyMessage, error) {
-	postJson, err := json.Marshal(post)
+func ContentClassify(ctx context.Context, content *Content) (*ClassifyMessage, error) {
+	contentJSON, err := json.Marshal(content)
 	if err != nil {
 		log.Error("AI大模型请求数据序列化失败", "err", err)
 		return nil, err
 	}
 
-	resp, err := fetchModel(ctx, contentClassifyPrompt, string(postJson), 0.1)
+	resp, err := fetchModel(ctx, contentClassifyPrompt, string(contentJSON), 0.1)
 
 	if err != nil {
 		log.Error("AI大模型请求失败", "err", err)

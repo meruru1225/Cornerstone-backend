@@ -1,7 +1,7 @@
 package consts
 
 const (
-	INSERT = "INSERT"
-	UPDATE = "UPDATE"
-	DELETE = "DELETE"
+	MimePrefixImage = "image/"
+	MimePrefixAudio = "audio/"
+	MimePrefixVideo = "video/"
 )

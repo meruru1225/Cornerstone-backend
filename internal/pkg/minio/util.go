@@ -15,9 +15,24 @@ func UploadFile(ctx context.Context, objectName string, reader io.Reader, size i
 	if Client == nil {
 		return "", fmt.Errorf("minio client is not initialized")
 	}
-	bucket := BucketName
 
-	uploadInfo, err := Client.PutObject(ctx, bucket, objectName, reader, size, minio.PutObjectOptions{
+	uploadInfo, err := Client.PutObject(ctx, MainBucket, objectName, reader, size, minio.PutObjectOptions{
+		ContentType: contentType,
+	})
+	if err != nil {
+		return "", fmt.Errorf("failed to upload file: %w", err)
+	}
+
+	return uploadInfo.Key, nil
+}
+
+// UploadTempFile 上传文件到MinIO，临时存储，默认24h过期
+func UploadTempFile(ctx context.Context, objectName string, reader io.Reader, contentType string) (string, error) {
+	if Client == nil {
+		return "", fmt.Errorf("minio client is not initialized")
+	}
+
+	uploadInfo, err := Client.PutObject(ctx, TempBucket, objectName, reader, -1, minio.PutObjectOptions{
 		ContentType: contentType,
 	})
 	if err != nil {
@@ -32,9 +47,8 @@ func DeleteFile(ctx context.Context, objectName string) error {
 	if Client == nil {
 		return fmt.Errorf("minio client is not initialized")
 	}
-	bucket := BucketName
 
-	err := Client.RemoveObject(ctx, bucket, objectName, minio.RemoveObjectOptions{})
+	err := Client.RemoveObject(ctx, MainBucket, objectName, minio.RemoveObjectOptions{})
 	if err != nil {
 		return fmt.Errorf("failed to delete file: %w", err)
 	}
@@ -62,6 +76,29 @@ func GetPublicURL(objectName string) string {
 		protocol = "https"
 	}
 	safeObjectName := url.PathEscape(objectName)
-	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, BucketName, safeObjectName)
+	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, MainBucket, safeObjectName)
 	return publicURL
+}
+
+// GetTempFileURL 获取临时文件的公共访问URL
+func GetTempFileURL(objectName string, external bool) string {
+	cfg := config.Cfg.MinIO
+
+	var endpoint string
+	var useSSL bool
+	if external {
+		endpoint = cfg.ExternalEndpoint
+		useSSL = true
+	} else {
+		endpoint = cfg.InternalEndpoint
+		useSSL = cfg.InternalUseSSL
+	}
+
+	protocol := "http"
+	if useSSL {
+		protocol = "https"
+	}
+	safeObjectName := url.PathEscape(objectName)
+	tempURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, TempBucket, safeObjectName)
+	return tempURL
 }

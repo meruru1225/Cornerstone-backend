@@ -14,6 +14,7 @@ type PostRepo interface {
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error)
 	GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
+	GetPostMedias(ctx context.Context, postId uint64) ([]*model.PostMedia, error)
 	GetPostTagNames(ctx context.Context, postId uint64) ([]string, error)
 	UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error
 	UpdatePostStatus(ctx context.Context, id uint64, status int) error
@@ -129,6 +130,21 @@ func (s *PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, of
 		return nil, err
 	}
 	return posts, nil
+}
+
+func (s *PostRepoImpl) GetPostMedias(ctx context.Context, postId uint64) ([]*model.PostMedia, error) {
+	var medias []*model.PostMedia
+
+	err := s.db.WithContext(ctx).
+		Select("id", "url", "media_type").
+		Where("post_id = ?", postId).
+		Order("sort_order ASC").
+		Find(&medias).Error
+
+	if err != nil {
+		return nil, err
+	}
+	return medias, nil
 }
 
 func (s *PostRepoImpl) GetPostTagNames(ctx context.Context, postId uint64) ([]string, error) {

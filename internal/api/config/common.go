@@ -65,7 +65,8 @@ type MinIOConfig struct {
 	ExternalEndpoint string `mapstructure:"external_endpoint"`
 	AccessKey        string `mapstructure:"access_key"`
 	SecretKey        string `mapstructure:"secret_key"`
-	Bucket           string `mapstructure:"bucket"`
+	MainBucket       string `mapstructure:"main_bucket"`
+	TempBucket       string `mapstructure:"temp_bucket"`
 	InternalUseSSL   bool   `mapstructure:"internal_use_ssl"`
 	UsePublicLink    bool   `mapstructure:"use_public_link"`
 }

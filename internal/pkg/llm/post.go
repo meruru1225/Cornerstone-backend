@@ -1,6 +1,6 @@
 package llm
 
-type Post struct {
+type Content struct {
 	Title   string `json:"title"`
 	Content string `json:"content"`
 }
