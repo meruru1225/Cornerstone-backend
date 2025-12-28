@@ -9,6 +9,7 @@ bin/
 *.dll
 *.so
 *.dylib
+*.bin
 # 测试覆盖率文件
 *.out
 *.test
