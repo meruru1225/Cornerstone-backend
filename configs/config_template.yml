@@ -20,8 +20,15 @@ sms:
 
 llm:
   url: "{{LLM_URL}}"
-  model: "{{LLM_MODEL}}"
+  text_model: "{{LLM_MODEL}}"
+  vision_model: "{{LLM_MODEL}}"
   api_key: "{{LLM_API_KEY}}"
+  prompts_path:
+    chat: "./prompts/chat.txt"
+    content_classify: "./prompts/content-classify.txt"
+    content_safe: "./prompts/content-safe.txt"
+    image_safe: "./prompts/image-safe.txt"
+    search_chat: "./prompts/search-chat.txt"
 
 minio:
   internal_endpoint: "{{MINIO_ENDPOINT}}"

@@ -49,7 +49,7 @@ func ContentSafe(ctx context.Context, post *Post) (int, error) {
 		return ContentSafeWarn, err
 	}
 
-	resp, err := fetchModel(ctx, contentSafePrompt, string(postJson))
+	resp, err := fetchModel(ctx, contentSafePrompt, string(postJson), 0.1)
 
 	if err != nil {
 		log.Error("AI大模型请求失败", "err", err)
@@ -74,6 +74,28 @@ func ContentSafe(ctx context.Context, post *Post) (int, error) {
 	return ContentSafeWarn, nil
 }
 
+func ImageSafe(ctx context.Context, urls []string) (int, error) {
+	if len(urls) == 0 {
+		return ContentSafePass, nil
+	}
+	if len(urls) > 9 {
+		return ContentSafeWarn, nil
+	}
+	resp, err := fetchModelByPicUrls(ctx, imageSafePrompt, urls, 0.1)
+	if err != nil {
+		log.Error("AI大模型请求失败", "err", err)
+		return ContentSafeWarn, err
+	}
+	if len(resp.Choices) > 0 {
+		safe := mapContentSafe[resp.Choices[0].Content]
+		if safe == 0 {
+			return ContentSafeWarn, nil
+		}
+		return safe, nil
+	}
+	return ContentSafeWarn, nil
+}
+
 func ContentClassify(ctx context.Context, post *Post) (*ClassifyMessage, error) {
 	postJson, err := json.Marshal(post)
 	if err != nil {
@@ -81,7 +103,7 @@ func ContentClassify(ctx context.Context, post *Post) (*ClassifyMessage, error) 
 		return nil, err
 	}
 
-	resp, err := fetchModel(ctx, contentClassifyPrompt, string(postJson))
+	resp, err := fetchModel(ctx, contentClassifyPrompt, string(postJson), 0.1)
 
 	if err != nil {
 		log.Error("AI大模型请求失败", "err", err)

@@ -15,7 +15,7 @@ var mapChatIdToChain = make(map[string]*chains.LLMChain)
 func chat(ctx context.Context, content string) (string, error) {
 	// TODO: 搜索帖子内容，并入searchChatPrompt
 
-	resp, err := fetchModel(ctx, searchChatPrompt, content)
+	resp, err := fetchModel(ctx, searchChatPrompt, content, 0.7)
 	if err != nil {
 		log.Error("AI大模型请求失败", "err", err)
 		return "", err

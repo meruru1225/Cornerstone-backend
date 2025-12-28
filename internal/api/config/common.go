@@ -44,9 +44,19 @@ type SMSConfig struct {
 }
 
 type LLMConfig struct {
-	URL    string `mapstructure:"url"`
-	Model  string `mapstructure:"model"`
-	ApiKey string `mapstructure:"api_key"`
+	URL         string           `mapstructure:"url"`
+	TextModel   string           `mapstructure:"text_model"`
+	VisionModel string           `mapstructure:"vision_model"`
+	ApiKey      string           `mapstructure:"api_key"`
+	PromptsPath PromptPathConfig `mapstructure:"prompts_path"`
+}
+
+type PromptPathConfig struct {
+	Chat            string `mapstructure:"chat"`
+	ContentClassify string `mapstructure:"content_classify"`
+	ContentSafe     string `mapstructure:"content_safe"`
+	ImageSafe       string `mapstructure:"image_safe"`
+	SearchChat      string `mapstructure:"search_chat"`
 }
 
 // MinIOConfig MinIO配置
