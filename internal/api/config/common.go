@@ -50,11 +50,13 @@ type LLMConfig struct {
 
 // MinIOConfig MinIO配置
 type MinIOConfig struct {
-	Endpoint  string `mapstructure:"endpoint"`
-	AccessKey string `mapstructure:"access_key"`
-	SecretKey string `mapstructure:"secret_key"`
-	Bucket    string `mapstructure:"bucket"`
-	UseSSL    bool   `mapstructure:"use_ssl"`
+	InternalEndpoint string `mapstructure:"internal_endpoint"`
+	ExternalEndpoint string `mapstructure:"external_endpoint"`
+	AccessKey        string `mapstructure:"access_key"`
+	SecretKey        string `mapstructure:"secret_key"`
+	Bucket           string `mapstructure:"bucket"`
+	InternalUseSSL   bool   `mapstructure:"internal_use_ssl"`
+	UsePublicLink    bool   `mapstructure:"use_public_link"`
 }
 
 // ElasticConfig Elastic配置

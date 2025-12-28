@@ -24,11 +24,13 @@ llm:
   api_key: "{{LLM_API_KEY}}"
 
 minio:
-  endpoint: "{{MINIO_ENDPOINT}}"
+  internal_endpoint: "{{MINIO_ENDPOINT}}"
+  external_endpoint: "{{MINIO_ENDPOINT}}"
   access_key: "{{MINIO_ACCESS_KEY}}"
   secret_key: "{{MINIO_SECRET_KEY}}"
   bucket: "{{MINIO_BUCKET}}"
-  use_ssl: false
+  internal_use_ssl: false
+  use_public_link: true
 
 elastic:
   address: "{{ELASTIC_ADDRESS}}"

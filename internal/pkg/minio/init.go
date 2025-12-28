@@ -20,9 +20,19 @@ var (
 func Init() error {
 	cfg := config.Cfg.MinIO
 
-	client, err := minio.New(cfg.Endpoint, &minio.Options{
+	var endpoint string
+	var useSSL bool
+	if cfg.InternalEndpoint != "" {
+		endpoint = cfg.InternalEndpoint
+		useSSL = cfg.InternalUseSSL
+	} else {
+		endpoint = cfg.ExternalEndpoint
+		useSSL = true
+	}
+
+	client, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(cfg.AccessKey, cfg.SecretKey, ""),
-		Secure: cfg.UseSSL,
+		Secure: useSSL,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to initialize minio client: %w", err)

@@ -5,6 +5,7 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"net/url"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -44,14 +45,23 @@ func DeleteFile(ctx context.Context, objectName string) error {
 // GetPublicURL 获取文件的公共访问URL
 func GetPublicURL(objectName string) string {
 	cfg := config.Cfg.MinIO
-	endpoint := cfg.Endpoint
+
+	var endpoint string
+	var useSSL bool
+	if cfg.UsePublicLink {
+		endpoint = cfg.ExternalEndpoint
+		useSSL = true
+	} else {
+		endpoint = cfg.InternalEndpoint
+		useSSL = cfg.InternalUseSSL
+	}
 
 	// 构造公共URL
 	protocol := "http"
-	if cfg.UseSSL {
+	if useSSL {
 		protocol = "https"
 	}
-
-	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, BucketName, objectName)
+	safeObjectName := url.PathEscape(objectName)
+	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, BucketName, safeObjectName)
 	return publicURL
 }
