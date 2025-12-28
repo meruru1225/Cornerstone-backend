@@ -5,13 +5,13 @@ go 1.24.6
 require (
 	github.com/IBM/sarama v1.46.3
 	github.com/elastic/go-elasticsearch/v8 v8.19.1
-	github.com/ggerganov/whisper.cpp/bindings/go v0.0.0-20251224075216-6114e692136b
 	github.com/gin-gonic/gin v1.11.0
 	github.com/go-playground/validator/v10 v10.27.0
 	github.com/goccy/go-json v0.10.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
 	github.com/jinzhu/copier v0.4.0
+	github.com/liuzl/gocc v0.0.0-20231231122217-0372e1059ca5
 	github.com/minio/minio-go/v7 v7.0.97
 	github.com/pkg/errors v0.9.1
 	github.com/redis/go-redis/v9 v9.16.0
@@ -28,6 +28,7 @@ require (
 	github.com/Masterminds/goutils v1.1.1 // indirect
 	github.com/Masterminds/semver/v3 v3.2.0 // indirect
 	github.com/Masterminds/sprig/v3 v3.2.3 // indirect
+	github.com/adamzy/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
 	github.com/bytedance/sonic v1.14.0 // indirect
 	github.com/bytedance/sonic/loader v0.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -68,6 +69,8 @@ require (
 	github.com/klauspost/cpuid/v2 v2.3.0 // indirect
 	github.com/klauspost/crc32 v1.3.0 // indirect
 	github.com/leodido/go-urn v1.4.0 // indirect
+	github.com/liuzl/cedar-go v0.0.0-20170805034717-80a9c64b256d // indirect
+	github.com/liuzl/da v0.0.0-20180704015230-14771aad5b1d // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
 	github.com/minio/crc64nvme v1.1.0 // indirect
 	github.com/minio/md5-simd v1.1.2 // indirect

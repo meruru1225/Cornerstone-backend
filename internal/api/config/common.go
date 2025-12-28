@@ -9,6 +9,7 @@ type Config struct {
 	LLM                      LLMConfig               `mapstructure:"llm"`
 	MinIO                    MinIOConfig             `mapstructure:"minio"`
 	Elastic                  ElasticConfig           `mapstructure:"elastic"`
+	LibPath                  LibPathConfig           `mapstructure:"lib_path"`
 	Kafka                    KafkaConfig             `mapstructure:"kafka"`
 	KafkaUserConsumer        KafkaUserConsumer       `mapstructure:"kafka_user_consumer"`
 	KafkaUserDetailConsumer  KafkaUserDetailConsumer `mapstructure:"kafka_user_detail_consumer"`
@@ -71,6 +72,14 @@ type ElasticConfig struct {
 type ElasticIndices struct {
 	UserIndex string `mapstructure:"user_index"`
 	PostIndex string `mapstructure:"post_index"`
+}
+
+// LibPathConfig 库路径
+type LibPathConfig struct {
+	FFmpeg       string `mapstructure:"ffmpeg"`
+	FFprobe      string `mapstructure:"ffprobe"`
+	Whisper      string `mapstructure:"whisper"`
+	WhisperModel string `mapstructure:"whisper_model"`
 }
 
 type KafkaConfig struct {

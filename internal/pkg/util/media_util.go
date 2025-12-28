@@ -1,20 +1,22 @@
 package util
 
 import (
+	"Cornerstone/internal/api/config"
 	"bufio"
 	"bytes"
 	"context"
 	"fmt"
 	"io"
 	"os/exec"
-	"path/filepath"
 	"strconv"
 	"strings"
+
+	"github.com/liuzl/gocc"
 )
 
 // GetDuration 获取视频时长
 func GetDuration(ctx context.Context, mediaUrl string) (float64, error) {
-	ffprobePath := filepath.Join("lib", "ffmpeg", "ffprobe.exe")
+	ffprobePath := config.Cfg.LibPath.FFprobe
 
 	cmd := exec.CommandContext(ctx, ffprobePath,
 		"-v", "error",
@@ -33,7 +35,7 @@ func GetDuration(ctx context.Context, mediaUrl string) (float64, error) {
 
 // GetAudioStream 获取视频的音频流
 func GetAudioStream(ctx context.Context, mediaUrl string) (io.ReadCloser, error) {
-	ffmpegPath := filepath.Join("lib", "ffmpeg", "ffmpeg.exe")
+	ffmpegPath := config.Cfg.LibPath.FFmpeg
 	cmd := exec.CommandContext(ctx, ffmpegPath,
 		"-i", mediaUrl,
 		"-vn",
@@ -58,7 +60,7 @@ func GetAudioStream(ctx context.Context, mediaUrl string) (io.ReadCloser, error)
 
 // GetImageFrames 获取视频帧
 func GetImageFrames(ctx context.Context, mediaUrl string, duration float64) ([]io.Reader, error) {
-	ffmpegPath := filepath.Join("lib", "ffmpeg", "ffmpeg.exe")
+	ffmpegPath := config.Cfg.LibPath.FFmpeg
 	fps := 5.0 / duration
 
 	cmd := exec.CommandContext(ctx, ffmpegPath,
@@ -97,9 +99,9 @@ func GetImageFrames(ctx context.Context, mediaUrl string, duration float64) ([]i
 
 // AudioStreamToText 将音频流转换为文本
 func AudioStreamToText(ctx context.Context, mediaUrl string) (string, error) {
-	ffmpegPath := filepath.Join("lib", "ffmpeg", "ffmpeg.exe")
-	whisperPath := filepath.Join("lib", "whisper", "whisper-cli.exe")
-	modelPath := filepath.Join("lib", "whisper", "ggml-small.bin")
+	ffmpegPath := config.Cfg.LibPath.FFmpeg
+	whisperPath := config.Cfg.LibPath.Whisper
+	modelPath := config.Cfg.LibPath.WhisperModel
 
 	// FFmpeg 从 URL 获取音频并输出标准 16kHz WAV 管道流
 	ffmpegCmd := exec.CommandContext(ctx, ffmpegPath,
@@ -143,7 +145,17 @@ func AudioStreamToText(ctx context.Context, mediaUrl string) (string, error) {
 		return "", err
 	}
 
-	return strings.TrimSpace(outBuf.String()), nil
+	// 返回结果，同时尽可能返回简体
+	res := strings.TrimSpace(outBuf.String())
+	t2s, err := gocc.New("t2s")
+	if err != nil {
+		return res, nil
+	}
+	out, err := t2s.Convert(res)
+	if err != nil {
+		return res, nil
+	}
+	return out, nil
 }
 
 // splitJPEG 辅助函数：基于特征码切割 JPEG 流

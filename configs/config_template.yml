@@ -40,6 +40,12 @@ elastic:
     user_index: "{{ELASTIC_USER_INDEX}}"
     post_index: "{{ELASTIC_POST_INDEX}}"
 
+lib_path:
+  ffmpeg: "./lib/ffmpeg/ffmpeg.exe"
+  ffprobe: "./lib/ffmpeg/ffmprobe.exe"
+  whisper: "./lib/whisper/whisper-cli.exe"
+  whisper_model: "./lib/whisper/ggml-small.bin"
+
 kafka:
   brokers:
     - "{{KAFKA_BROKER}}"
