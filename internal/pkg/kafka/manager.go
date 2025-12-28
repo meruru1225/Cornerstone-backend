@@ -74,6 +74,7 @@ func NewConsumerManager(
 
 // Start 启动所有消费者
 func (m *ConsumerManager) Start(ctx context.Context, cfg *config.Config) error {
+	// 启动 User Consumer
 	go func() {
 		topic := cfg.KafkaUserConsumer.Topic
 		log.Info("User consumer started", "topic", topic)
@@ -87,7 +88,35 @@ func (m *ConsumerManager) Start(ctx context.Context, cfg *config.Config) error {
 		}
 	}()
 
-	// 启动 Follows Consumer
+	// 启动 User Detail Consumer
+	go func() {
+		topic := cfg.KafkaUserDetailConsumer.Topic
+		log.Info("User Detail consumer started", "topic", topic)
+		for {
+			if err := m.usersConsumer.Consume(ctx, []string{topic}, m.usersHandler); err != nil {
+				log.Error("Error from consumer", "err", err)
+			}
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}()
+
+	// 启动 User Follows Consumer
+	go func() {
+		topic := cfg.KafkaUserFollowsConsumer.Topic
+		log.Info("User Follows consumer started", "topic", topic)
+		for {
+			if err := m.userFollowsConsumer.Consume(ctx, []string{topic}, m.userFollowsHandler); err != nil {
+				log.Error("Error from consumer", "err", err)
+			}
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}()
+
+	// 启动 Post Consumer
 	go func() {
 		topic := cfg.KafkaPostConsumer.Topic
 		log.Info("Post consumer started", "topic", topic)

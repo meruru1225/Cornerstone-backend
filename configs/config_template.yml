@@ -60,9 +60,12 @@ kafka:
     username: "{{KAFKA_SASL_USERNAME}}"
     password: "{{KAFKA_SASL_PASSWORD}}"
   consumer:
+    batch_size: 32
+    batch_timeout: 1
     session_timeout: 10
     heartbeat_interval: 3
-    rebalance_timeout: 60
+    rebalance_timeout: 180
+    max_processing_time: 60
 
 kafka_user_consumer:
   topic: "{{KAFKA_USER_TOPIC}}"

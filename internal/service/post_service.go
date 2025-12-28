@@ -16,7 +16,7 @@ type PostService interface {
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*dto.PostDTO, error)
 	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error)
 	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error)
-	UpdatePost(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
+	UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
 	DeletePost(ctx context.Context, userID uint64, postID uint64) error
 }
 
@@ -80,8 +80,8 @@ func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, 
 	return s.batchToPostDTO(posts)
 }
 
-// UpdatePost 更新帖子
-func (s *postServiceImpl) UpdatePost(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error {
+// UpdatePostContent 更新帖子内容
+func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error {
 	oldPost, err := s.postRepo.GetPost(ctx, postID)
 	if err != nil {
 		return err
@@ -100,7 +100,7 @@ func (s *postServiceImpl) UpdatePost(ctx context.Context, userID uint64, postID 
 	post.Status = 0
 
 	postMedias := s.mapMedias(postDTO.Medias)
-	return s.postRepo.UpdatePost(ctx, post, postMedias)
+	return s.postRepo.UpdatePostContent(ctx, post, postMedias)
 }
 
 // DeletePost 删除帖子 (包含鉴权)

@@ -23,10 +23,10 @@ type PostES struct {
 
 // PostMediaES 对应 Mapping 中的 media 对象
 type PostMediaES struct {
-	Type     string `json:"type"`
-	URL      string `json:"url"`
-	Cover    string `json:"cover"`
-	Width    int    `json:"width"`
-	Height   int    `json:"height"`
-	Duration int    `json:"duration"`
+	Type     string  `json:"type"`
+	URL      string  `json:"url"`
+	Cover    *string `json:"cover,omitempty"`
+	Width    int     `json:"width"`
+	Height   int     `json:"height"`
+	Duration int     `json:"duration"`
 }

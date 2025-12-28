@@ -26,6 +26,7 @@ func newSaramaConfig(kafkaCfg config.KafkaConfig) *sarama.Config {
 	c.Consumer.Group.Heartbeat.Interval = time.Duration(kafkaCfg.Consumer.HeartbeatInterval) * time.Second
 	c.Consumer.Group.Rebalance.Timeout = time.Duration(kafkaCfg.Consumer.RebalanceTimeout) * time.Second
 	c.Consumer.Offsets.AutoCommit.Enable = false
+	c.Consumer.MaxProcessingTime = time.Duration(kafkaCfg.Consumer.MaxProcessingTime) * time.Second
 
 	return c
 }

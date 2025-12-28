@@ -74,8 +74,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return err
 	}
 
-	flag := s.checkContentIsChange(canalMsg)
-	if flag {
+	if s.checkOnlyStatusChange(canalMsg) {
 		return nil
 	}
 
@@ -88,28 +87,42 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return s.postESRepo.DeletePost(ctx, StrToUint64(canalMsg.Data[0]["id"]))
 	}
 
+	// 查询关联表，获取关联的媒体
+	medias, err := s.postDBRepo.GetPostMedias(ctx, post.ID)
+	if err != nil {
+		return err
+	}
+	for _, media := range medias {
+		post.Media = append(post.Media, es.PostMediaES{
+			Type:     media.FileType,
+			URL:      media.MediaURL,
+			Cover:    media.CoverURL,
+			Width:    media.Width,
+			Height:   media.Height,
+			Duration: media.Duration,
+		})
+	}
+
+	// 没有内容变更，直接覆写ES
+	if !s.checkContentIsChange(canalMsg) {
+		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
+	}
+
 	toLLMContent := &llm.Content{
 		Title:   post.Title,
 		Content: post.Content,
 	}
-
 	// LLM 审查， 修改审核状态
 	contentSafe, err := llm.ContentSafe(ctx, toLLMContent)
 	if err != nil {
 		return err
 	}
-	medias, err := s.postDBRepo.GetPostMedias(ctx, post.ID)
-	if err != nil {
-		return err
-	}
 	mediaSafe, err := s.auditMedia(ctx, medias)
 	var safe int
-	if contentSafe == llm.ContentSafePass && mediaSafe == llm.ContentSafePass {
-		safe = llm.ContentSafePass
-	} else if contentSafe == llm.ContentSafeWarn || mediaSafe == llm.ContentSafeWarn {
-		safe = llm.ContentSafeWarn
+	if contentSafe > mediaSafe {
+		safe = contentSafe
 	} else {
-		safe = llm.ContentSafeDeny
+		safe = mediaSafe
 	}
 	err = s.postDBRepo.UpdatePostStatus(ctx, post.ID, safe)
 	if err != nil {
@@ -139,32 +152,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		post.UserTags = tags
 	}
 
-	// 最后导入用户信息并覆写ES
-	newUUID, err := uuid.NewUUID()
-	if err != nil {
-		return err
-	}
-	lockKey := consts.UserDetailLock + strconv.FormatUint(post.UserID, 10)
-	_, err = redis.TryLock(ctx, lockKey, newUUID.String(), time.Second*5, -1)
-	if err != nil {
-		return err
-	}
-	defer redis.UnLock(ctx, lockKey, newUUID.String())
-
-	users, err := s.userDBRepo.GetUserSimpleInfoByIds(ctx, []uint64{post.UserID})
-	if err != nil {
-		return err
-	}
-	if len(users) == 0 {
-		return errors.New("user not found")
-	}
-	post.UserNickname = users[0].Nickname
-	post.UserAvatar = users[0].AvatarURL
-	err = s.postESRepo.IndexPost(ctx, post, canalMsg.TS)
-	if err != nil {
-		return err
-	}
-	return nil
+	return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 }
 
 func (s *PostsHandler) toESModel(message *CanalMessage) (*es.PostES, error) {
@@ -192,17 +180,50 @@ func (s *PostsHandler) toESModel(message *CanalMessage) (*es.PostES, error) {
 	}, nil
 }
 
-func (s *PostsHandler) checkContentIsChange(message *CanalMessage) bool {
+func (s *PostsHandler) getUserDetailAndIndexES(ctx context.Context, post *es.PostES, timeStamp int64) error {
+	// 导入用户信息并覆写ES，此处加锁避免并发一致性问题
+	newUUID, err := uuid.NewUUID()
+	if err != nil {
+		return err
+	}
+	lockKey := consts.UserDetailLock + strconv.FormatUint(post.UserID, 10)
+	_, err = redis.TryLock(ctx, lockKey, newUUID.String(), time.Second*5, -1)
+	if err != nil {
+		return err
+	}
+	defer redis.UnLock(ctx, lockKey, newUUID.String())
+
+	users, err := s.userDBRepo.GetUserSimpleInfoByIds(ctx, []uint64{post.UserID})
+	if err != nil {
+		return err
+	}
+	if len(users) == 0 {
+		return errors.New("user not found")
+	}
+	post.UserNickname = users[0].Nickname
+	post.UserAvatar = users[0].AvatarURL
+	return s.postESRepo.IndexPost(ctx, post, timeStamp)
+}
+
+func (s *PostsHandler) checkOnlyStatusChange(message *CanalMessage) bool {
 	if message.Type == INSERT {
-		return true
+		return false
 	}
 	if len(message.Old) == 0 {
 		return true
 	}
 	row := message.Old[0]
-	_, titleChanged := row["title"]
-	_, contentChanged := row["content"]
-	return titleChanged || contentChanged
+	_, statusChanged := row["status"]
+	return statusChanged && len(row) == 1
+}
+
+func (s *PostsHandler) checkContentIsChange(message *CanalMessage) bool {
+	if message.Type == INSERT {
+		return true
+	}
+	row := message.Old[0]
+	_, versionChanged := row["content_version"]
+	return versionChanged
 }
 
 func (s *PostsHandler) auditMedia(ctx context.Context, media []*model.PostMedia) (int, error) {

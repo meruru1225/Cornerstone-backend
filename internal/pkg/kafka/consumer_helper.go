@@ -1,6 +1,7 @@
 package kafka
 
 import (
+	"Cornerstone/internal/api/config"
 	"context"
 	"errors"
 	log "log/slog"
@@ -11,15 +12,13 @@ import (
 	"github.com/goccy/go-json"
 )
 
-const (
-	batchSize    = 32
-	batchTimeout = 1 * time.Second
-)
-
 type LogicFunc func(ctx context.Context, msg *sarama.ConsumerMessage) error
 
 // pullMessageBatch 拉取一批消息并执行业务逻辑
 func pullMessageBatch(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim, logic LogicFunc) error {
+	cfg := config.Cfg.Kafka.Consumer
+	batchSize := cfg.BatchSize
+	batchTimeout := time.Duration(cfg.BatchTimeout) * time.Millisecond
 	batch := make([]*sarama.ConsumerMessage, 0, batchSize)
 	ticker := time.NewTicker(batchTimeout)
 	defer ticker.Stop()

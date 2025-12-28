@@ -16,7 +16,7 @@ type PostRepo interface {
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostMedias(ctx context.Context, postId uint64) ([]*model.PostMedia, error)
 	GetPostTagNames(ctx context.Context, postId uint64) ([]string, error)
-	UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error
+	UpdatePostContent(ctx context.Context, post *model.Post, media []*model.PostMedia) error
 	UpdatePostStatus(ctx context.Context, id uint64, status int) error
 	DeletePost(ctx context.Context, id uint64) error
 	UpsertPostTag(ctx context.Context, postID uint64, tagName string) error
@@ -162,7 +162,7 @@ func (s *PostRepoImpl) GetPostTagNames(ctx context.Context, postId uint64) ([]st
 	return tagNames, nil
 }
 
-func (s *PostRepoImpl) UpdatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error {
+func (s *PostRepoImpl) UpdatePostContent(ctx context.Context, post *model.Post, media []*model.PostMedia) error {
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
 		if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostMedia{}).Error; err != nil {
 			return err
@@ -170,7 +170,12 @@ func (s *PostRepoImpl) UpdatePost(ctx context.Context, post *model.Post, media [
 		if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostTag{}).Error; err != nil {
 			return err
 		}
-		if err := tx.Select("title", "content", "status", "updated_at").Updates(post).Error; err != nil {
+		updateData := map[string]interface{}{
+			"title":           post.Title,
+			"content":         post.Content,
+			"content_version": gorm.Expr("content_version + 1"),
+		}
+		if err := tx.Model(&model.Post{}).Where("id = ?", post.ID).Updates(updateData).Error; err != nil {
 			return err
 		}
 		return s.createPostAssociations(tx, post.ID, media)

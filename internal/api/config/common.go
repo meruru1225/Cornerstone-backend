@@ -105,9 +105,12 @@ type SaslConfig struct {
 }
 
 type ConsumerConfig struct {
+	BatchSize         int `mapstructure:"batch_size"`
+	BatchTimeout      int `mapstructure:"batch_timeout"`
 	SessionTimeout    int `mapstructure:"session_timeout"`
 	HeartbeatInterval int `mapstructure:"heartbeat_interval"`
 	RebalanceTimeout  int `mapstructure:"rebalance_timeout"`
+	MaxProcessingTime int `mapstructure:"max_processing_time"`
 }
 
 type KafkaUserConsumer struct {
