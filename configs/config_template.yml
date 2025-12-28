@@ -37,7 +37,6 @@ minio:
   secret_key: "{{MINIO_SECRET_KEY}}"
   bucket: "{{MINIO_BUCKET}}"
   internal_use_ssl: false
-  use_public_link: true
 
 elastic:
   address: "{{ELASTIC_ADDRESS}}"

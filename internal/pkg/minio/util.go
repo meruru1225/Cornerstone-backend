@@ -59,24 +59,9 @@ func DeleteFile(ctx context.Context, objectName string) error {
 // GetPublicURL 获取文件的公共访问URL
 func GetPublicURL(objectName string) string {
 	cfg := config.Cfg.MinIO
-
-	var endpoint string
-	var useSSL bool
-	if cfg.UsePublicLink {
-		endpoint = cfg.ExternalEndpoint
-		useSSL = true
-	} else {
-		endpoint = cfg.InternalEndpoint
-		useSSL = cfg.InternalUseSSL
-	}
-
 	// 构造公共URL
-	protocol := "http"
-	if useSSL {
-		protocol = "https"
-	}
 	safeObjectName := url.PathEscape(objectName)
-	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, MainBucket, safeObjectName)
+	publicURL := fmt.Sprintf("https://%s/%s/%s", cfg.ExternalEndpoint, MainBucket, safeObjectName)
 	return publicURL
 }
 
