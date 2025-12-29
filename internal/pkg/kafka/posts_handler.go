@@ -74,10 +74,6 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return err
 	}
 
-	if s.checkOnlyStatusChange(canalMsg) {
-		return nil
-	}
-
 	post, err := s.toESModel(canalMsg)
 	if err != nil {
 		return err
@@ -112,7 +108,6 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		if getById != nil {
 			post.UserTags = getById.UserTags
 			post.AITags = getById.AITags
-			post.Status = getById.Status
 		}
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
@@ -159,6 +154,13 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return nil
 	})
 	mediaSafe, err := s.auditMedia(ctx, medias)
+	if err != nil {
+		return err
+	}
+	err = g.Wait()
+	if err != nil {
+		return err
+	}
 	var safe int
 	if contentSafe > mediaSafe {
 		safe = contentSafe
@@ -170,7 +172,6 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return err
 	}
 
-	post.Status = safe
 	return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 }
 
@@ -222,19 +223,6 @@ func (s *PostsHandler) getUserDetailAndIndexES(ctx context.Context, post *es.Pos
 	post.UserNickname = users[0].Nickname
 	post.UserAvatar = users[0].AvatarURL
 	return s.postESRepo.IndexPost(ctx, post, timeStamp)
-}
-
-func (s *PostsHandler) checkOnlyStatusChange(message *CanalMessage) bool {
-	if message.Type == INSERT {
-		return false
-	}
-	if len(message.Old) == 0 {
-		return true
-	}
-	row := message.Old[0]
-	_, statusChanged := row["status"]
-	_, updateAtChanged := row["updated_at"]
-	return statusChanged && updateAtChanged && len(row) == 2
 }
 
 func (s *PostsHandler) checkContentIsChange(message *CanalMessage) bool {
