@@ -27,8 +27,11 @@ import (
 
 var ErrAuditDenyTriggered = errors.New("audit deny detected, cancelling other batches")
 
-type auditResults struct {
+type Result struct {
 	sync.Mutex
+	StopChan       chan struct{}
+	MainTags       []string
+	Tags           []string
 	allPendingUrls []string
 	maxStatus      int32
 }
@@ -112,63 +115,69 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
 
-	toLLMContent := &llm.Content{
-		Title:   post.Title,
-		Content: post.Content,
-	}
-
-	// LLM 获取标签
-	g, gCtx := errgroup.WithContext(ctx)
-	g.Go(func() error {
-		classify, err := llm.ContentClassify(gCtx, toLLMContent)
-		if err != nil {
-			return err
-		}
-		if classify != nil {
-			if classify.MainTag != "" {
-				err = s.postDBRepo.UpsertPostTag(gCtx, post.ID, classify.MainTag)
-				if err != nil {
-					return err
-				}
-			}
-			if len(classify.Tags) > 0 {
-				post.AITags = classify.Tags
-			}
-		}
-		return nil
-	})
-
 	// 获取用户设定的标签
 	tags := util.ExtractTags(post.Content)
 	if len(tags) > 0 {
 		post.UserTags = tags
 	}
 
-	// LLM 审查， 修改审核状态
-	var contentSafe int
+	// LLM 处理内容
+	r := &Result{
+		StopChan:       make(chan struct{}),
+		MainTags:       make([]string, 0),
+		Tags:           make([]string, 0),
+		allPendingUrls: make([]string, 0),
+		maxStatus:      int32(llm.ContentSafePass),
+	}
+	var closeOnce sync.Once
+	safeClose := func() { closeOnce.Do(func() { close(r.StopChan) }) }
+	waitDone := make(chan error, 1)
+	defer safeClose()
+	toLLMContent := &llm.Content{
+		Title:   post.Title,
+		Content: post.Content,
+	}
+	g, gCtx := errgroup.WithContext(ctx)
 	g.Go(func() error {
-		contentSafe, err = llm.ContentSafe(ctx, toLLMContent)
+		return s.llmProcessContent(gCtx, toLLMContent, r, safeClose)
+	})
+	g.Go(func() error {
+		return s.llmProcessMedia(gCtx, medias, r, safeClose)
+	})
+
+	go func() {
+		waitDone <- g.Wait()
+	}()
+	select {
+	case err = <-waitDone:
 		if err != nil {
 			return err
 		}
-		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-r.StopChan:
+		gCtx.Done()
+		return s.postDBRepo.UpdatePostStatus(ctx, post.ID, llm.ContentSafeDeny)
+	}
+
+	// LLM 进行语义聚合
+	aggress, err := llm.AggressiveTag(ctx, &llm.TagAggressive{
+		MainTags: r.MainTags,
+		Tags:     r.Tags,
 	})
-	mediaSafe, err := s.auditMedia(ctx, medias)
 	if err != nil {
 		return err
-	}
-	err = g.Wait()
-	if err != nil {
-		return err
-	}
-	var safe int
-	if contentSafe > mediaSafe {
-		safe = contentSafe
 	} else {
-		safe = mediaSafe
+		post.AITags = aggress.Tags
+		if aggress.MainTag != "" {
+			if err = s.postDBRepo.UpsertPostTag(ctx, post.ID, aggress.MainTag); err != nil {
+				return err
+			}
+		}
 	}
-	err = s.postDBRepo.UpdatePostStatus(ctx, post.ID, safe)
-	if err != nil {
+
+	post.Status = int(atomic.LoadInt32(&r.maxStatus))
+	if err = s.postDBRepo.UpdatePostStatus(ctx, post.ID, post.Status); err != nil {
 		return err
 	}
 
@@ -234,38 +243,47 @@ func (s *PostsHandler) checkContentIsChange(message *CanalMessage) bool {
 	return versionChanged
 }
 
-func (s *PostsHandler) auditMedia(ctx context.Context, media []*model.PostMedia) (int, error) {
-	if len(media) == 0 {
-		return llm.ContentSafePass, nil
+func (s *PostsHandler) llmProcessContent(ctx context.Context, content *llm.Content, res *Result, safeClose func()) error {
+	processed, err := llm.ContentProcess(ctx, content)
+	if err != nil {
+		return err
 	}
+	s.updateMaxStatus(res, int32(processed.Status), safeClose)
+	res.Lock()
+	defer res.Unlock()
+	if processed.MainTag != "" {
+		res.MainTags = append(res.MainTags, processed.MainTag)
+	}
+	if len(processed.Tags) > 0 {
+		res.Tags = append(res.Tags, processed.Tags...)
+	}
+	return nil
+}
 
-	// 状态容器：聚合所有并发任务产出的结果
-	results := &auditResults{
-		allPendingUrls: make([]string, 0),
-		maxStatus:      int32(llm.ContentSafePass),
+func (s *PostsHandler) llmProcessMedia(ctx context.Context, media []*model.PostMedia, res *Result, safeClose func()) error {
+	if len(media) == 0 {
+		return nil
 	}
 
 	// 并发提取所有媒体特征（图片、视频帧、音频转写）
-	if err := s.collectAllFeatures(ctx, media, results); err != nil {
-		return llm.ContentSafeWarn, err
+	if err := s.collectAllFeatures(ctx, media, res, safeClose); err != nil {
+		return err
 	}
 
 	// 如果已发现音频/文本违规，直接返回
-	if atomic.LoadInt32(&results.maxStatus) == int32(llm.ContentSafeDeny) {
-		return llm.ContentSafeDeny, nil
+	if atomic.LoadInt32(&res.maxStatus) == int32(llm.ContentSafeDeny) {
+		return nil
 	}
 
 	// 对收集到的图片（原始图+采样帧）进行分批视觉审计
-	visualStatus, err := s.performBatchImageAudit(ctx, results.allPendingUrls)
-	if err != nil {
-		return llm.ContentSafeWarn, err
+	if err := s.performBatchImageAudit(ctx, res, safeClose); err != nil {
+		return err
 	}
 
-	// 最终聚合：取视觉审计和音频审计中的最高风险级别
-	return s.aggregateFinalVerdict(int(atomic.LoadInt32(&results.maxStatus)), visualStatus), nil
+	return nil
 }
 
-func (s *PostsHandler) collectAllFeatures(ctx context.Context, media []*model.PostMedia, res *auditResults) error {
+func (s *PostsHandler) collectAllFeatures(ctx context.Context, media []*model.PostMedia, res *Result, safeClose func()) error {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	for _, m := range media {
@@ -281,10 +299,10 @@ func (s *PostsHandler) collectAllFeatures(ctx context.Context, media []*model.Po
 
 			case consts.MimePrefixVideo:
 				// 内部启动多个子任务，但不创建新的 errgroup.Wait
-				return s.processVideoItem(gCtx, g, m, res)
+				return s.processVideoItem(gCtx, g, m, res, safeClose)
 
 			case consts.MimePrefixAudio:
-				return s.processAudioItem(gCtx, g, m, res)
+				return s.processAudioItem(gCtx, g, m, res, safeClose)
 			}
 			return nil
 		})
@@ -292,14 +310,14 @@ func (s *PostsHandler) collectAllFeatures(ctx context.Context, media []*model.Po
 	return g.Wait()
 }
 
-func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, m *model.PostMedia, res *auditResults) error {
+func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, m *model.PostMedia, res *Result, safeClose func()) error {
 	// 视觉特征提取任务
 	g.Go(func() error {
 		url := minio.GetInternalFileURL(m.MediaURL)
 		duration, err := util.GetDuration(ctx, url)
-		if err != nil || duration > 15*60 {
+		if err != nil {
 			return err
-		} // 超过15分钟策略
+		}
 
 		frames, err := util.GetImageFrames(ctx, url, duration)
 		if err != nil {
@@ -351,39 +369,31 @@ func (s *PostsHandler) processVideoItem(ctx context.Context, g *errgroup.Group, 
 			return err
 		}
 
-		safe, err := llm.ContentSafe(ctx, &llm.Content{Content: text})
-		if err == nil {
-			s.updateMaxStatus(&res.maxStatus, int32(safe))
-		}
-		return err
+		return s.llmProcessContent(ctx, &llm.Content{Content: text}, res, safeClose)
 	})
 	return nil
 }
 
-func (s *PostsHandler) processAudioItem(ctx context.Context, g *errgroup.Group, m *model.PostMedia, res *auditResults) error {
+func (s *PostsHandler) processAudioItem(ctx context.Context, g *errgroup.Group, m *model.PostMedia, res *Result, safeClose func()) error {
 	g.Go(func() error {
 		url := minio.GetInternalFileURL(m.MediaURL)
 		text, err := util.AudioStreamToText(ctx, url)
 		if err != nil {
 			return err
 		}
-		safe, err := llm.ContentSafe(ctx, &llm.Content{Content: text})
-		if err == nil {
-			s.updateMaxStatus(&res.maxStatus, int32(safe))
-		}
-		return err
+		return s.llmProcessContent(ctx, &llm.Content{Content: text}, res, safeClose)
 	})
 	return nil
 }
 
-func (s *PostsHandler) performBatchImageAudit(ctx context.Context, urls []string) (int, error) {
+func (s *PostsHandler) performBatchImageAudit(ctx context.Context, res *Result, safeClose func()) error {
+	urls := res.allPendingUrls
 	if len(urls) == 0 {
-		return llm.ContentSafePass, nil
+		return nil
 	}
 
 	const batchSize = 5
 	g, gCtx := errgroup.WithContext(ctx)
-	var visualMax = int32(llm.ContentSafePass)
 
 	for i := 0; i < len(urls); i += batchSize {
 		end := i + batchSize
@@ -393,18 +403,19 @@ func (s *PostsHandler) performBatchImageAudit(ctx context.Context, urls []string
 		batch := urls[i:end]
 
 		g.Go(func() error {
-			if atomic.LoadInt32(&visualMax) == int32(llm.ContentSafeDeny) {
-				return nil
-			}
-
-			res, err := llm.ImageSafe(gCtx, batch)
+			processed, err := llm.ImageProcess(gCtx, batch)
 			if err != nil {
 				return err
 			}
 
-			s.updateMaxStatus(&visualMax, int32(res))
-			if res == llm.ContentSafeDeny {
-				return ErrAuditDenyTriggered
+			s.updateMaxStatus(res, int32(processed.Status), safeClose)
+			res.Lock()
+			defer res.Unlock()
+			if processed.MainTag != "" {
+				res.MainTags = append(res.MainTags, processed.MainTag)
+			}
+			if processed.Tags != nil {
+				res.Tags = append(res.Tags, processed.Tags...)
 			}
 			return nil
 		})
@@ -412,38 +423,27 @@ func (s *PostsHandler) performBatchImageAudit(ctx context.Context, urls []string
 
 	err := g.Wait()
 	if err != nil && !errors.Is(err, ErrAuditDenyTriggered) {
-		return llm.ContentSafeWarn, err
+		return err
 	}
-	return int(visualMax), nil
+	return nil
 }
 
 // updateMaxStatus 使用原子操作确保并发环境下状态更新的安全性
 // 遵循优先级：Deny(3) > Warn(2) > Pass(1)
-func (s *PostsHandler) updateMaxStatus(addr *int32, val int32) {
+func (s *PostsHandler) updateMaxStatus(res *Result, val int32, safeClose func()) {
 	for {
-		old := atomic.LoadInt32(addr)
+		if val == int32(llm.ContentSafeDeny) {
+			log.Info("审核触发拒绝策略")
+			safeClose()
+			return
+		}
+		old := atomic.LoadInt32(&res.maxStatus)
 		if val <= old {
-			return // 如果新状态优先级不高于旧状态，无需更新
+			return
 		}
 		// 使用 CAS 保证并发更新的原子性
-		if atomic.CompareAndSwapInt32(addr, old, val) {
+		if atomic.CompareAndSwapInt32(&res.maxStatus, old, val) {
 			return
 		}
 	}
-}
-
-// aggregateFinalVerdict 将异步任务的状态与视觉审计的状态进行最终聚合
-func (s *PostsHandler) aggregateFinalVerdict(asyncStatus int, visualStatus int) int {
-	// 1任何一个模态触发了 Deny，整体判定为 Deny
-	if asyncStatus == llm.ContentSafeDeny || visualStatus == llm.ContentSafeDeny {
-		return llm.ContentSafeDeny
-	}
-
-	// 2如果没有任何 Deny，但存在 Warn，则判定为 Warn
-	if asyncStatus == llm.ContentSafeWarn || visualStatus == llm.ContentSafeWarn {
-		return llm.ContentSafeWarn
-	}
-
-	// 只有全部模态均为 Pass，才最终判定为 Pass
-	return llm.ContentSafePass
 }

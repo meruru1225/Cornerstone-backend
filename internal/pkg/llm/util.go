@@ -19,6 +19,10 @@ func readPrompt(file string) string {
 }
 
 func fetchModel(ctx context.Context, systemPrompt string, userPrompt string, temp float64) (*llms.ContentResponse, error) {
+	if err := TextSem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer TextSem.Release(1)
 	messages := []llms.MessageContent{
 		{
 			Role: llms.ChatMessageTypeSystem,
@@ -41,6 +45,10 @@ func fetchModel(ctx context.Context, systemPrompt string, userPrompt string, tem
 }
 
 func fetchModelByPicUrls(ctx context.Context, systemPrompt string, picUrls []string, temp float64) (*llms.ContentResponse, error) {
+	if err := ImageSem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer ImageSem.Release(1)
 	contentPart := make([]llms.ContentPart, len(picUrls))
 	for i, url := range picUrls {
 		contentPart[i] = llms.ImageURLPart(url)

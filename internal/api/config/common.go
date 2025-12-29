@@ -52,11 +52,11 @@ type LLMConfig struct {
 }
 
 type PromptPathConfig struct {
-	Chat            string `mapstructure:"chat"`
-	ContentClassify string `mapstructure:"content_classify"`
-	ContentSafe     string `mapstructure:"content_safe"`
-	ImageSafe       string `mapstructure:"image_safe"`
-	SearchChat      string `mapstructure:"search_chat"`
+	AggressiveTag  string `mapstructure:"aggressive_tag"`
+	Chat           string `mapstructure:"chat"`
+	ContentProcess string `mapstructure:"content_process"`
+	ImageProcess   string `mapstructure:"image_process"`
+	SearchChat     string `mapstructure:"search_chat"`
 }
 
 // MinIOConfig MinIO配置
