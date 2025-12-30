@@ -99,18 +99,61 @@ func GetImageFrames(ctx context.Context, mediaUrl string, duration float64) ([]i
 	return frames, nil
 }
 
-// AudioStreamToText 将音频流转换为文本
+// AudioStreamToText 音频转文字
 func AudioStreamToText(ctx context.Context, mediaUrl string) (string, error) {
+	duration, err := GetDuration(ctx, mediaUrl)
+	if err != nil {
+		return "", err
+	}
+
+	// 采样策略
+	var segments [][2]float64
+	if duration <= 30 {
+		segments = append(segments, [2]float64{0, duration})
+	} else {
+		// 大于30秒，头10s，中10s，尾10s
+		segments = append(segments, [2]float64{0, 10})
+		segments = append(segments, [2]float64{duration/2 - 5, 10})
+		segments = append(segments, [2]float64{duration - 10, 10})
+	}
+
+	var fullText strings.Builder
+	for _, seg := range segments {
+		text, err := transcribeSegment(ctx, mediaUrl, seg[0], seg[1])
+		if err != nil {
+			return "", err
+		}
+		if text != "" {
+			fullText.WriteString(text + " ")
+		}
+	}
+
+	res := strings.TrimSpace(fullText.String())
+	t2s, err := gocc.New("t2s")
+	if err != nil {
+		return res, nil
+	}
+	out, _ := t2s.Convert(res)
+	return out, nil
+}
+
+// transcribeSegment 转写音频片段
+func transcribeSegment(ctx context.Context, url string, start float64, length float64) (string, error) {
 	ffmpegPath := getLibPath(config.Cfg.LibPath.FFmpeg)
 	whisperPath := getLibPath(config.Cfg.LibPath.Whisper)
 	modelPath := getLibPath(config.Cfg.LibPath.WhisperModel)
 
-	// FFmpeg 从 URL 获取音频并输出标准 16kHz WAV 管道流
 	ffmpegCmd := exec.CommandContext(ctx, ffmpegPath,
-		"-i", mediaUrl,
-		"-ar", "16000", "-ac", "1", "-c:a", "pcm_s16le", "-f", "wav", "pipe:1")
+		"-ss", fmt.Sprintf("%.2f", start),
+		"-t", fmt.Sprintf("%.2f", length),
+		"-i", url,
+		"-ar", "16000",
+		"-ac", "1",
+		"-c:a", "pcm_s16le",
+		"-f", "wav",
+		"pipe:1",
+	)
 
-	// Whisper执行
 	whisperCmd := exec.CommandContext(ctx, whisperPath,
 		"-m", modelPath,
 		"-l", "zh",
@@ -120,15 +163,12 @@ func AudioStreamToText(ctx context.Context, mediaUrl string) (string, error) {
 		"--output-file", "--output-*",
 	)
 
-	// 建立管道连接
 	pr, pw := io.Pipe()
 	ffmpegCmd.Stdout = pw
 	whisperCmd.Stdin = pr
-
 	var outBuf bytes.Buffer
 	whisperCmd.Stdout = &outBuf
 
-	// 启动进程
 	if err := ffmpegCmd.Start(); err != nil {
 		return "", err
 	}
@@ -136,28 +176,15 @@ func AudioStreamToText(ctx context.Context, mediaUrl string) (string, error) {
 		return "", err
 	}
 
-	// 异步监控生产者
 	go func() {
 		_ = ffmpegCmd.Wait()
 		_ = pw.Close()
 	}()
 
-	// 等待 Whisper 识别完成
 	if err := whisperCmd.Wait(); err != nil {
 		return "", err
 	}
-
-	// 返回结果，同时尽可能返回简体
-	res := strings.TrimSpace(outBuf.String())
-	t2s, err := gocc.New("t2s")
-	if err != nil {
-		return res, nil
-	}
-	out, err := t2s.Convert(res)
-	if err != nil {
-		return res, nil
-	}
-	return out, nil
+	return strings.TrimSpace(outBuf.String()), nil
 }
 
 // splitJPEG 辅助函数：基于特征码切割 JPEG 流

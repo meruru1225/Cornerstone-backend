@@ -15,7 +15,7 @@ type ThinkingMiddleware struct {
 }
 
 func (m *ThinkingMiddleware) RoundTrip(req *http.Request) (*http.Response, error) {
-	// 1. 读取原始 Body
+	// 读取原始 Body
 	body, _ := io.ReadAll(req.Body)
 	var data map[string]interface{}
 	err := json.Unmarshal(body, &data)
@@ -23,7 +23,7 @@ func (m *ThinkingMiddleware) RoundTrip(req *http.Request) (*http.Response, error
 		return nil, err
 	}
 
-	// 注入 GLM 特有参数
+	// 注入参数：关闭GLM思考
 	data["thinking"] = map[string]interface{}{
 		"type": "disabled",
 	}
