@@ -6,4 +6,5 @@ import "Cornerstone/internal/api/handler"
 type HandlersGroup struct {
 	UserHandler       *handler.UserHandler
 	UserFollowHandler *handler.UserFollowHandler
+	PostHandler       *handler.PostHandler
 }

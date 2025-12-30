@@ -31,6 +31,7 @@ llm:
     chat: "./prompts/chat.txt"
     content_process: "./prompts/content-process.txt"
     image_process: "./prompts/image-process.txt"
+    search: "./prompts/search.txt"
 
 minio:
   internal_endpoint: "{{MINIO_ENDPOINT}}"

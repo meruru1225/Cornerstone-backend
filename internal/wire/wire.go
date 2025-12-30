@@ -6,6 +6,7 @@ import (
 	"Cornerstone/internal/api/handler"
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/kafka"
+	"Cornerstone/internal/pkg/llm"
 	"Cornerstone/internal/repository"
 	"Cornerstone/internal/service"
 
@@ -28,19 +29,24 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	roleRepo := repository.NewRoleRepo(db)
 	postRepo := repository.NewPostRepo(db)
 
+	// ES 实例
+	userESRepo := es.NewUserRepo()
+	postESRepo := es.NewPostRepo()
+
+	// Agent
+	agent := llm.NewAgent(postESRepo)
+
 	// Service 实例
 	userService := service.NewUserService(userRepo, roleRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
 	smsService := service.NewSmsService()
-
-	// ES 实例
-	userESRepo := es.NewUserRepo()
-	postESRepo := es.NewPostRepo()
+	postService := service.NewPostService(agent, postRepo)
 
 	handlers := &api.HandlersGroup{
 		UserHandler:       handler.NewUserHandler(userService, userRolesService, smsService),
 		UserFollowHandler: handler.NewUserFollowHandler(userFollowService),
+		PostHandler:       handler.NewPostHandler(postService),
 	}
 
 	router := api.SetupRouter(handlers)

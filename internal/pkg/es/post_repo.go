@@ -48,13 +48,6 @@ func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, query
 				Fields: []string{"title^2", "content"},
 			},
 		}).
-		// 配置 RRF 排名融合
-		Rank(&types.RankContainer{
-			Rrf: &types.RrfRank{
-				RankWindowSize: util.PtrInt64(50),
-				RankConstant:   util.PtrInt64(60),
-			},
-		}).
 		Source_(&types.SourceFilter{
 			Excludes: []string{"content_vector"},
 		}).
