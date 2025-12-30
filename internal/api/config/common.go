@@ -44,11 +44,14 @@ type SMSConfig struct {
 }
 
 type LLMConfig struct {
-	URL         string           `mapstructure:"url"`
-	TextModel   string           `mapstructure:"text_model"`
-	VisionModel string           `mapstructure:"vision_model"`
-	ApiKey      string           `mapstructure:"api_key"`
-	PromptsPath PromptPathConfig `mapstructure:"prompts_path"`
+	URL            string           `mapstructure:"url"`
+	TextModel      string           `mapstructure:"text_model"`
+	VisionModel    string           `mapstructure:"vision_model"`
+	EmbeddingModel string           `mapstructure:"embedding_model"`
+	ThinkingMode   string           `mapstructure:"thinking_mode"`
+	Dimensions     int              `mapstructure:"dimensions"`
+	ApiKey         string           `mapstructure:"api_key"`
+	PromptsPath    PromptPathConfig `mapstructure:"prompts_path"`
 }
 
 type PromptPathConfig struct {

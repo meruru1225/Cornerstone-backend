@@ -9,6 +9,7 @@ type PostES struct {
 	Status        int           `json:"status"`
 	Title         string        `json:"title"`
 	Content       string        `json:"content"`
+	ContentVector []float32     `json:"content_vector,omitempty"`
 	UserTags      []string      `json:"user_tags"`
 	AITags        []string      `json:"ai_tags"`
 	Media         []PostMediaES `json:"media"`

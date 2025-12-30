@@ -111,6 +111,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		if getById != nil {
 			post.UserTags = getById.UserTags
 			post.AITags = getById.AITags
+			post.ContentVector = getById.ContentVector
 		}
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
@@ -174,6 +175,14 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 				return err
 			}
 		}
+	}
+
+	// LLM 切分向量
+	vector, err := llm.GetVector(ctx, toLLMContent, aggress.Tags)
+	if err != nil {
+		return err
+	} else {
+		post.ContentVector = vector
 	}
 
 	post.Status = int(atomic.LoadInt32(&r.maxStatus))

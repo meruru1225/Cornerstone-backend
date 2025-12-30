@@ -4,13 +4,13 @@ import (
 	"Cornerstone/internal/api/config"
 	log "log/slog"
 
-	"github.com/tmc/langchaingo/llms"
+	"github.com/tmc/langchaingo/llms/openai"
 )
 
 // ContentSensitive 定义敏感标签
 const ContentSensitive = "sensitive"
 
-var llmClient llms.Model
+var llmClient *openai.LLM
 
 var (
 	aggressiveTagPrompt  string

@@ -3,6 +3,7 @@ package llm
 import (
 	"Cornerstone/internal/api/config"
 	"context"
+	"errors"
 	log "log/slog"
 	"os"
 
@@ -71,4 +72,22 @@ func fetchModelByPicUrls(ctx context.Context, systemPrompt string, picUrls []str
 		llms.WithModel(config.Cfg.LLM.VisionModel),
 		llms.WithTemperature(temp),
 	)
+}
+
+func fetchModelEmbedding(ctx context.Context, s string) ([]float32, error) {
+	if err := EmbedSem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer EmbedSem.Release(1)
+
+	log.Info("正在请求AI大模型")
+
+	vectors, err := llmClient.CreateEmbedding(ctx, []string{s})
+	if err != nil {
+		return nil, err
+	}
+	if len(vectors) == 0 || len(vectors[0]) == 0 {
+		return nil, errors.New("vector is empty")
+	}
+	return vectors[0], nil
 }

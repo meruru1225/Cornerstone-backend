@@ -3,7 +3,9 @@ package llm
 import (
 	"context"
 	"errors"
+	"fmt"
 	log "log/slog"
+	"strings"
 
 	"github.com/goccy/go-json"
 )
@@ -89,4 +91,18 @@ func AggressiveTag(ctx context.Context, payload *TagAggressive) (*ContentRespons
 	}
 
 	return nil, errors.New("标签聚合-AI大模型返回数据为空")
+}
+
+func GetVector(ctx context.Context, content *Content, tags []string) ([]float32, error) {
+	if content == nil {
+		return nil, errors.New("内容处理-AI大模型返回数据为空")
+	}
+	s := fmt.Sprintf("Title: %s\nContent: %s\nTags: %s", content.Title, content.Content, strings.Join(tags, ","))
+	vector, err := fetchModelEmbedding(ctx, s)
+	if err != nil {
+		log.Error("内容处理-AI大模型向量获取失败", "err", err)
+		return nil, err
+	}
+	log.Info("内容处理-AI大模型向量获取成功", "vector", vector)
+	return vector, nil
 }
