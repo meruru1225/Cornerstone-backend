@@ -17,7 +17,6 @@ var (
 	chatPrompt           string
 	contentProcessPrompt string
 	imageProcessPrompt   string
-	searchChatPrompt     string
 )
 
 func InitLLM() error {
@@ -37,7 +36,6 @@ func InitLLM() error {
 	chatPrompt = readPrompt(promptPath.Chat)
 	contentProcessPrompt = readPrompt(promptPath.ContentProcess)
 	imageProcessPrompt = readPrompt(promptPath.ImageProcess)
-	searchChatPrompt = readPrompt(promptPath.SearchChat)
 
 	log.Info("LLM Initial Success")
 	return nil

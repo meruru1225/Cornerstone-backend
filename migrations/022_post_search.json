@@ -43,6 +43,9 @@
         "index": true,
         "similarity": "cosine"
       },
+      "main_tag": {
+        "type": "keyword"
+      },
       "user_tags": {
         "type": "keyword"
       },

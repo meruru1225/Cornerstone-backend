@@ -31,3 +31,13 @@ func ExtractTags(rawContent string) []string {
 
 	return tags
 }
+
+// PtrInt 用于将 int 转换为 *int
+func PtrInt(i int) *int {
+	return &i
+}
+
+// PtrInt64 用于将 int64 转换为 *int64
+func PtrInt64(i int64) *int64 {
+	return &i
+}

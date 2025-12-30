@@ -1,20 +1,27 @@
 package es
 
 import (
+	"Cornerstone/internal/pkg/util"
 	"context"
 	"errors"
+	"fmt"
 	log "log/slog"
 	"strconv"
 
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/conflicts"
+	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/sortorder"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/versiontype"
 	"github.com/goccy/go-json"
 )
 
 type PostRepo interface {
+	HybridSearch(ctx context.Context, queryText string, queryVector []float32, from, size int) ([]*PostES, error)
 	GetPostById(ctx context.Context, id uint64) (*PostES, error)
+	GetPostByMainTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error)
 	IndexPost(ctx context.Context, post *PostES, version int64) error
 	DeletePost(ctx context.Context, id uint64) error
+	UpdatePostUserDetail(ctx context.Context, userID uint64, newNickname string, newAvatar string) error
 }
 
 type PostRepoImpl struct {
@@ -22,6 +29,54 @@ type PostRepoImpl struct {
 
 func NewPostRepo() PostRepo {
 	return &PostRepoImpl{}
+}
+
+func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, queryVector []float32, from, size int) ([]*PostES, error) {
+	searchReq := Client.Search().
+		Index(PostIndex).
+		// 配置 k-NN 搜索
+		Knn(types.KnnSearch{
+			Field:         "content_vector",
+			QueryVector:   queryVector,
+			K:             util.PtrInt(10),
+			NumCandidates: util.PtrInt(100),
+		}).
+		// 配置传统文本搜索（增强精准度）
+		Query(&types.Query{
+			MultiMatch: &types.MultiMatchQuery{
+				Query:  queryText,
+				Fields: []string{"title^2", "content"},
+			},
+		}).
+		// 配置 RRF 排名融合
+		Rank(&types.RankContainer{
+			Rrf: &types.RrfRank{
+				RankWindowSize: util.PtrInt64(50),
+				RankConstant:   util.PtrInt64(60),
+			},
+		}).
+		Source_(&types.SourceFilter{
+			Excludes: []string{"content_vector"},
+		}).
+		From(from).
+		Size(size)
+
+	resp, err := searchReq.Do(ctx)
+	if err != nil {
+		log.Error("Post Index: Search failed", "query_text", queryText, "query_vector", queryVector, "from", from, "size", size)
+		return nil, err
+	}
+
+	results := make([]*PostES, 0, len(resp.Hits.Hits))
+	for _, hit := range resp.Hits.Hits {
+		var post PostES
+		if err = json.Unmarshal(hit.Source_, &post); err != nil {
+			continue
+		}
+		results = append(results, &post)
+	}
+
+	return results, nil
 }
 
 func (s *PostRepoImpl) GetPostById(ctx context.Context, id uint64) (*PostES, error) {
@@ -53,10 +108,52 @@ func (s *PostRepoImpl) GetPostById(ctx context.Context, id uint64) (*PostES, err
 	return &post, nil
 }
 
+func (s *PostRepoImpl) GetPostByMainTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error) {
+	searchField := "user_tags"
+	if isMain {
+		searchField = "main_tag"
+	}
+
+	searchReq := Client.Search().
+		Index(PostIndex).
+		Query(&types.Query{
+			Term: map[string]types.TermQuery{
+				searchField: {Value: tag},
+			},
+		}).
+		Source_(&types.SourceFilter{
+			Excludes: []string{"content_vector"},
+		}).
+		Sort(types.SortOptions{
+			SortOptions: map[string]types.FieldSort{
+				"created_at": {Order: &sortorder.Desc},
+			},
+		}).
+		From(from).
+		Size(size)
+
+	resp, err := searchReq.Do(ctx)
+	if err != nil {
+		log.Error("Post Index: Search failed", "tag", tag, "is_main", isMain, "from", from, "size", size)
+		return nil, err
+	}
+
+	results := make([]*PostES, 0, len(resp.Hits.Hits))
+	for _, hit := range resp.Hits.Hits {
+		var post PostES
+		if err = json.Unmarshal(hit.Source_, &post); err != nil {
+			continue
+		}
+		results = append(results, &post)
+	}
+
+	return results, nil
+}
+
 func (s *PostRepoImpl) IndexPost(ctx context.Context, post *PostES, version int64) error {
 	docID := strconv.FormatUint(post.ID, 10)
 
-	log.Info("ES Index Post", "post", post, "version", version)
+	log.Info("Post Index: Indexing Post", "post", post, "version", version)
 
 	_, err := Client.Index(PostIndex).
 		Id(docID).
@@ -69,7 +166,7 @@ func (s *PostRepoImpl) IndexPost(ctx context.Context, post *PostES, version int6
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == ConflictCode {
-				log.Warn("Post Version Conflict", "id", post.ID, "version", version)
+				log.Warn("Post Index: Post Version Conflict", "id", post.ID, "version", version)
 				return nil
 			}
 		}
@@ -88,13 +185,52 @@ func (s *PostRepoImpl) DeletePost(ctx context.Context, id uint64) error {
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == NotFoundCode {
-				log.Warn("Post already deleted or not found in ES", "id", id)
+				log.Warn("Post Index: Post already deleted or not found in ES", "id", id)
 				return nil
 			}
 		}
 		return err
 	}
 
-	log.Info("ES Delete success", "id", id)
+	log.Info("Post Index: Delete success", "id", id)
+	return nil
+}
+
+// UpdatePostUserDetail 同步更新 post_index 中冗余的用户信息
+func (s *PostRepoImpl) UpdatePostUserDetail(ctx context.Context, userID uint64, newNickname string, newAvatar string) error {
+	nicknameJSON, _ := json.Marshal(newNickname)
+	avatarJSON, _ := json.Marshal(newAvatar)
+
+	params := map[string]json.RawMessage{
+		"new_nickname": json.RawMessage(nicknameJSON),
+		"new_avatar":   json.RawMessage(avatarJSON),
+	}
+
+	scriptSource := "ctx._source.user_nickname = params.new_nickname; ctx._source.user_avatar = params.new_avatar;"
+
+	req := Client.UpdateByQuery(PostIndex).
+		Query(&types.Query{
+			Term: map[string]types.TermQuery{
+				"user_id": {Value: userID},
+			},
+		}).
+		Script(&types.Script{
+			Source: &scriptSource,
+			Params: params,
+		}).
+		Conflicts(conflicts.Proceed)
+
+	resp, err := req.Do(ctx)
+	if err != nil {
+		log.Error("Post Index: Update User Detail Failed", "err", err)
+		return errors.New(fmt.Sprintf("Post Index: Update User Detail Failed: %s", err.Error()))
+	}
+
+	if len(resp.Failures) != 0 {
+		log.Error("Post Index: Update User Detail Has Failures", "failures", resp.Failures)
+		return errors.New(fmt.Sprintf("Post Index: Update User Detail Has Failures, count: %d", len(resp.Failures)))
+	}
+
+	log.Info("Post Index: Update User Detail Success", "count", resp.Total)
 	return nil
 }

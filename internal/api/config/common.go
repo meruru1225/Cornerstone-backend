@@ -59,7 +59,6 @@ type PromptPathConfig struct {
 	Chat           string `mapstructure:"chat"`
 	ContentProcess string `mapstructure:"content_process"`
 	ImageProcess   string `mapstructure:"image_process"`
-	SearchChat     string `mapstructure:"search_chat"`
 }
 
 // MinIOConfig MinIO配置

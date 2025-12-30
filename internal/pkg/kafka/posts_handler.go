@@ -109,6 +109,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 			return err
 		}
 		if getById != nil {
+			post.MainTag = getById.MainTag
 			post.UserTags = getById.UserTags
 			post.AITags = getById.AITags
 			post.ContentVector = getById.ContentVector
@@ -169,6 +170,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	if err != nil {
 		return err
 	} else {
+		post.MainTag = aggress.MainTag
 		post.AITags = aggress.Tags
 		if aggress.MainTag != "" {
 			if err = s.postDBRepo.UpsertPostTag(ctx, post.ID, aggress.MainTag); err != nil {
