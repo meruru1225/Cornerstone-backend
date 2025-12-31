@@ -24,7 +24,7 @@ func (h *UserFollowHandler) GetUserFollowers(c *gin.Context) {
 
 	followers, err := h.userFollowSvc.GetUserFollowers(c, userId, limit, offset)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, followers)
@@ -37,7 +37,7 @@ func (h *UserFollowHandler) GetUserFollowings(c *gin.Context) {
 
 	followings, err := h.userFollowSvc.GetUserFollowing(c, userId, limit, offset)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, followings)
@@ -47,7 +47,7 @@ func (h *UserFollowHandler) GetUserFollowersCount(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 	count, err := h.userFollowSvc.GetUserFollowerCount(c, userId)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, map[string]int64{"count": count})
@@ -57,7 +57,7 @@ func (h *UserFollowHandler) GetUserFollowingCount(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 	count, err := h.userFollowSvc.GetUserFollowingCount(c, userId)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, map[string]int64{"count": count})
@@ -79,7 +79,7 @@ func (h *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 	}
 	userFollow, err := h.userFollowSvc.GetSomeoneIsFollowing(c, userId, followingId)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, userFollow)
@@ -89,7 +89,7 @@ func (h *UserFollowHandler) Follow(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 	followingId, err := h.getFollowingId(c)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	err = h.userFollowSvc.CreateUserFollow(c, &model.UserFollow{
@@ -97,7 +97,7 @@ func (h *UserFollowHandler) Follow(c *gin.Context) {
 		FollowingID: followingId,
 	})
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, nil)
@@ -107,7 +107,7 @@ func (h *UserFollowHandler) Unfollow(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 	followingId, err := h.getFollowingId(c)
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	err = h.userFollowSvc.DeleteUserFollow(c, &model.UserFollow{
@@ -115,7 +115,7 @@ func (h *UserFollowHandler) Unfollow(c *gin.Context) {
 		FollowingID: followingId,
 	})
 	if err != nil {
-		response.ProcessError(c, err)
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, nil)

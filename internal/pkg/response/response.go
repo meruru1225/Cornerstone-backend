@@ -39,8 +39,8 @@ func Fail(c *gin.Context, businessCode int, message string) {
 	})
 }
 
-// ProcessError 处理错误
-func ProcessError(c *gin.Context, err error) {
+// Error 处理错误
+func Error(c *gin.Context, err error) {
 	var ve validator.ValidationErrors
 	if errors.As(err, &ve) {
 		Fail(c, BadRequest, "参数错误")
@@ -56,7 +56,7 @@ func ProcessError(c *gin.Context, err error) {
 	code, ok := service.ErrorMap[err]
 	if !ok {
 		code = InternalServerError
-		log.Error("ProcessError", "err", err)
+		log.Error("Error", "err", err)
 	}
 	Fail(c, code, err.Error())
 }
