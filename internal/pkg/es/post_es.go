@@ -13,6 +13,7 @@ type PostES struct {
 	MainTag       string        `json:"main_tag"`
 	UserTags      []string      `json:"user_tags"`
 	AITags        []string      `json:"ai_tags"`
+	AISummary     string        `json:"ai_summary"`
 	Media         []PostMediaES `json:"media"`
 	UserNickname  string        `json:"user_nickname"`
 	UserAvatar    string        `json:"user_avatar"`

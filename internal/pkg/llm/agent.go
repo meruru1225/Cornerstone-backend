@@ -162,8 +162,8 @@ func (s *AgentImpl) executeSearchLogic(ctx context.Context, query string) (strin
 	builder.WriteString("以下是为你找到的站内相关笔记，请参考：\n\n")
 
 	for i, post := range posts {
-		item := fmt.Sprintf("### 笔记 %d\n- **标题**: %s\n- **作者**: %s\n- **内容**: %s\n---\n",
-			i+1, post.Title, post.UserNickname, post.Content)
+		item := fmt.Sprintf("### 笔记 %d\n- **标题**: %s\n- **作者**: %s\n- **内容**: %s\n- **AI总结**: %s\n---\n",
+			i+1, post.Title, post.UserNickname, post.Content, post.AISummary)
 		builder.WriteString(item)
 	}
 	return builder.String(), nil

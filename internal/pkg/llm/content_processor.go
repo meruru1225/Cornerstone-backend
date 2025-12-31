@@ -57,6 +57,10 @@ func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, er
 	log.Info("内容处理-AI大模型请求成功", "resp", resp)
 
 	if len(resp.Choices) > 0 {
+		if resp.Choices[0].StopReason == ContentSensitive {
+			return GetDenyResponse(), nil
+		}
+
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
 			log.Error("内容处理-AI大模型返回数据解析失败", "err", err)
@@ -68,36 +72,41 @@ func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, er
 	return nil, errors.New("内容处理-AI大模型返回数据为空")
 }
 
-func AggressiveTag(ctx context.Context, payload *TagAggressive) (*ContentResponse, error) {
+func Aggressive(ctx context.Context, payload *TagAggressive) (*ContentResponse, error) {
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {
-		log.Error("标签聚合-AI大模型请求数据序列化失败", "err", err)
+		log.Error("内容聚合-AI大模型请求数据序列化失败", "err", err)
 		return nil, err
 	}
 
 	resp, err := fetchModel(ctx, aggressiveTagPrompt, string(payloadJson), 0.1)
 	if err != nil {
-		log.Error("标签聚合-AI大模型请求失败", "err", err)
+		log.Error("内容聚合-AI大模型请求失败", "err", err)
 		return nil, err
 	}
 
 	if len(resp.Choices) > 0 {
+		if resp.Choices[0].StopReason == ContentSensitive {
+			return GetDenyResponse(), nil
+		}
+
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
 			log.Error("标签聚合-AI大模型返回数据解析失败", "err", err)
 			return nil, err
 		}
+		log.Info("标签聚合-AI大模型请求成功", "resp", resp)
 		return contentResp, nil
 	}
 
 	return nil, errors.New("标签聚合-AI大模型返回数据为空")
 }
 
-func GetVector(ctx context.Context, content *Content, tags []string) ([]float32, error) {
+func GetVector(ctx context.Context, content *Content, tags []string, summary string) ([]float32, error) {
 	if content == nil {
 		return nil, errors.New("内容处理-AI大模型返回数据为空")
 	}
-	s := fmt.Sprintf("Title: %s\nContent: %s\nTags: %s", content.Title, content.Content, strings.Join(tags, ","))
+	s := fmt.Sprintf("Title: %s\nContent: %s\nTags: %s\nSummary: %s\n", content.Title, content.Content, strings.Join(tags, ","), summary)
 	vector, err := fetchModelEmbedding(ctx, s)
 	if err != nil {
 		log.Error("内容处理-AI大模型向量获取失败", "err", err)

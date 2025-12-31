@@ -42,12 +42,14 @@ type ContentResponse struct {
 	Status  int
 	MainTag string
 	Tags    []string
+	Summary string
 }
 
 type ReturnResponse struct {
 	Status  string   `json:"status"`
 	MainTag string   `json:"main_tag"`
 	Tags    []string `json:"tags"`
+	Summary string   `json:"summary"`
 }
 
 func GetContentResponse(s string) (*ContentResponse, error) {
@@ -67,6 +69,7 @@ func GetContentResponse(s string) (*ContentResponse, error) {
 		Status:  mapContentSafe[temp.Status],
 		MainTag: temp.MainTag,
 		Tags:    temp.Tags,
+		Summary: temp.Summary,
 	}
 
 	// 校验status

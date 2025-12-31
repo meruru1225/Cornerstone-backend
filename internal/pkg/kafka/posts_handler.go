@@ -32,6 +32,7 @@ type Result struct {
 	StopChan       chan struct{}
 	MainTags       []string
 	Tags           []string
+	Summaries      []string
 	allPendingUrls []string
 	maxStatus      int32
 }
@@ -113,6 +114,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 			post.UserTags = getById.UserTags
 			post.AITags = getById.AITags
 			post.ContentVector = getById.ContentVector
+			post.AISummary = getById.AISummary
 		}
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
@@ -163,15 +165,17 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	}
 
 	// LLM 进行语义聚合
-	aggress, err := llm.AggressiveTag(ctx, &llm.TagAggressive{
-		MainTags: r.MainTags,
-		Tags:     r.Tags,
+	aggress, err := llm.Aggressive(ctx, &llm.TagAggressive{
+		MainTags:  r.MainTags,
+		Tags:      r.Tags,
+		Summaries: r.Summaries,
 	})
 	if err != nil {
 		return err
 	} else {
 		post.MainTag = aggress.MainTag
 		post.AITags = aggress.Tags
+		post.AISummary = aggress.Summary
 		if aggress.MainTag != "" {
 			if err = s.postDBRepo.UpsertPostTag(ctx, post.ID, aggress.MainTag); err != nil {
 				return err
@@ -180,7 +184,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	}
 
 	// LLM 切分向量
-	vector, err := llm.GetVector(ctx, toLLMContent, aggress.Tags)
+	vector, err := llm.GetVector(ctx, toLLMContent, aggress.Tags, aggress.Summary)
 	if err != nil {
 		return err
 	} else {
@@ -267,6 +271,9 @@ func (s *PostsHandler) llmProcessContent(ctx context.Context, content *llm.Conte
 	}
 	if len(processed.Tags) > 0 {
 		res.Tags = append(res.Tags, processed.Tags...)
+	}
+	if processed.Summary != "" {
+		res.Summaries = append(res.Summaries, processed.Summary)
 	}
 	return nil
 }
@@ -427,6 +434,9 @@ func (s *PostsHandler) performBatchImageAudit(ctx context.Context, res *Result, 
 			}
 			if processed.Tags != nil {
 				res.Tags = append(res.Tags, processed.Tags...)
+			}
+			if processed.Summary != "" {
+				res.Summaries = append(res.Summaries, processed.Summary)
 			}
 			return nil
 		})
