@@ -3,7 +3,6 @@ package service
 import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
-	"Cornerstone/internal/pkg/llm"
 	"Cornerstone/internal/repository"
 	"context"
 	"strconv"
@@ -22,13 +21,11 @@ type PostService interface {
 }
 
 type postServiceImpl struct {
-	agent    llm.Agent
 	postRepo repository.PostRepo
 }
 
-func NewPostService(agent llm.Agent, postRepo repository.PostRepo) PostService {
+func NewPostService(postRepo repository.PostRepo) PostService {
 	return &postServiceImpl{
-		agent:    agent,
 		postRepo: postRepo,
 	}
 }

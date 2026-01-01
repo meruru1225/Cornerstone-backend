@@ -21,6 +21,11 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			})
 		})
 
+		agentGroup := apiGroup.Group("/agent")
+		{
+			agentGroup.GET("/search", group.AgentHandler.Search)
+		}
+
 		userGroup := apiGroup.Group("/user")
 		{
 			// 无需登录即可访问的接口

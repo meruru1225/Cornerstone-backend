@@ -34,16 +34,18 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	postESRepo := es.NewPostRepo()
 
 	// Agent
-	agent := llm.NewAgent(postESRepo)
+	toolHandler := llm.NewToolHandler(postESRepo)
+	agent := llm.NewAgent(toolHandler)
 
 	// Service 实例
 	userService := service.NewUserService(userRepo, roleRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
 	smsService := service.NewSmsService()
-	postService := service.NewPostService(agent, postRepo)
+	postService := service.NewPostService(postRepo)
 
 	handlers := &api.HandlersGroup{
+		AgentHandler:      handler.NewAgentHandler(agent),
 		UserHandler:       handler.NewUserHandler(userService, userRolesService, smsService),
 		UserFollowHandler: handler.NewUserFollowHandler(userFollowService),
 		PostHandler:       handler.NewPostHandler(postService),

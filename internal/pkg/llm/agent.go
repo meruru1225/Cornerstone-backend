@@ -1,35 +1,38 @@
 package llm
 
 import (
-	"Cornerstone/internal/api/config"
-	"Cornerstone/internal/pkg/es"
 	"context"
 	"fmt"
 	log "log/slog"
 	"strings"
 
-	"github.com/goccy/go-json"
 	"github.com/tmc/langchaingo/llms"
 	"golang.org/x/sync/errgroup"
 )
 
+var tools = []llms.Tool{
+	DefineGeneralSearchTool(),
+}
+
 type Agent interface {
-	Chat(ctx context.Context, userInput string) (string, error)
-	ChatWithChain(ctx context.Context, question string, chatId string) (chan string, error)
+	ChatSingle(ctx context.Context, userInput string) chan string
+	Converse(ctx context.Context, question string, chatId string) chan string
 }
 
 type AgentImpl struct {
-	postRepo es.PostRepo
+	handler *ToolHandler
 }
 
-func NewAgent(postRepo es.PostRepo) Agent {
+func NewAgent(handler *ToolHandler) Agent {
 	return &AgentImpl{
-		postRepo: postRepo,
+		handler: handler,
 	}
 }
 
-// Chat 智能对话入口：支持多轮工具调用与并发检索
-func (s *AgentImpl) Chat(ctx context.Context, userInput string) (string, error) {
+// ChatSingle 单轮对话Agent
+func (s *AgentImpl) ChatSingle(ctx context.Context, userInput string) chan string {
+	out := make(chan string, 20)
+
 	messages := []llms.MessageContent{
 		{
 			Role: llms.ChatMessageTypeSystem,
@@ -45,126 +48,160 @@ func (s *AgentImpl) Chat(ctx context.Context, userInput string) (string, error) 
 		},
 	}
 
-	// 限制迭代轮次，防止逻辑黑洞
-	maxIterations := 5
-	for i := 0; i < maxIterations; i++ {
-		// 询问模型意图
-		resp, err := s.callLLMWithTools(ctx, messages)
+	go func() {
+		defer close(out)
+
+		err := s.runAgentLoopStream(ctx, messages, out, 5)
 		if err != nil {
-			return "", fmt.Errorf("LLM 调用失败: %w", err)
+			out <- fmt.Sprintf("\n\n> ⚠️ **系统错误**: %v", err)
+		}
+	}()
+
+	return out
+}
+
+// Converse 多轮对话Agent
+func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string) chan string {
+	log.Info("聊天机器人-链式调用", "ctx", ctx, "question", question, "chatId", chatId)
+	return nil
+}
+
+// runAgentLoop 封装了通用的 ReAct 循环逻辑
+func (s *AgentImpl) runAgentLoop(ctx context.Context, messages []llms.MessageContent, maxIter int) (string, error) {
+	for i := 0; i < maxIter; i++ {
+		// 调用模型决策
+		resp, err := fetchAgentCall(ctx, messages, tools, 0.7, false, nil)
+		if err != nil {
+			return "", err
 		}
 
 		choice := resp.Choices[0]
 
-		// 如果模型给出了文本回答且没有工具调用，直接返回
-		if len(choice.ToolCalls) == 0 && choice.Content != "" {
-			return choice.Content, nil
-		}
-
-		// 处理工具调用分支
-		if len(choice.ToolCalls) > 0 {
-			// 将 AI 的意图加入历史记录 (Role: AI)
-			aiMsg := llms.MessageContent{Role: llms.ChatMessageTypeAI}
-			for _, tc := range choice.ToolCalls {
-				aiMsg.Parts = append(aiMsg.Parts, llms.ToolCall{
-					ID:   tc.ID,
-					Type: "function",
-					FunctionCall: &llms.FunctionCall{
-						Name:      tc.FunctionCall.Name,
-						Arguments: tc.FunctionCall.Arguments,
-					},
-				})
-			}
-			messages = append(messages, aiMsg)
-
-			// 并发执行搜索工具
-			g, gCtx := errgroup.WithContext(ctx)
-			toolResponses := make([]llms.ContentPart, len(choice.ToolCalls))
-
-			for idx, tc := range choice.ToolCalls {
-				i, toolCall := idx, tc
-				g.Go(func() error {
-					var args struct {
-						Query string `json:"query"`
-					}
-					if err := json.Unmarshal([]byte(toolCall.FunctionCall.Arguments), &args); err != nil {
-						return err
-					}
-
-					searchResult, err := s.executeSearchLogic(gCtx, args.Query)
-					if err != nil {
-						searchResult = "（站内搜索暂时不可用）"
-					}
-
-					toolResponses[i] = llms.ToolCallResponse{
-						ToolCallID: toolCall.ID,
-						Name:       toolCall.FunctionCall.Name,
-						Content:    searchResult,
-					}
-					return nil
-				})
-			}
-
-			if err := g.Wait(); err != nil {
-				return "", err
-			}
-
-			// 将工具结果加入历史 (Role: Tool)
-			for _, tr := range toolResponses {
-				messages = append(messages, llms.MessageContent{
-					Role:  llms.ChatMessageTypeTool,
-					Parts: []llms.ContentPart{tr},
-				})
+		// 模型决定直接回复文本
+		if len(choice.ToolCalls) == 0 {
+			if choice.Content != "" {
+				return choice.Content, nil
 			}
 			continue
 		}
 
-		if choice.Content != "" {
-			return choice.Content, nil
-		}
-	}
+		// 模型决定调用工具 - 记录模型意图
+		messages = append(messages, llms.MessageContent{
+			Role:  llms.ChatMessageTypeAI,
+			Parts: s.convertToolCallsToParts(choice.ToolCalls),
+		})
 
+		// 并行执行工具并同步响应
+		toolResponses, err := s.executeTools(ctx, choice.ToolCalls)
+		if err != nil {
+			return "", err
+		}
+
+		// 将工具结果反馈给上下文，进入下一轮迭代
+		messages = append(messages, toolResponses...)
+	}
 	return "抱歉，由于检索轮次过多，我无法在安全时间内为您总结结果。", nil
 }
 
-func (s *AgentImpl) ChatWithChain(ctx context.Context, question string, chatId string) (chan string, error) {
-	log.Info("聊天机器人-链式调用", "ctx", ctx, "question", question, "chatId", chatId)
-	return nil, nil
+// runAgentLoopStream 将推理过程中的文本和工具状态实时推向 out 通道
+func (s *AgentImpl) runAgentLoopStream(ctx context.Context, messages []llms.MessageContent, out chan string, maxIter int) error {
+	for i := 0; i < maxIter; i++ {
+		var contentBuffer strings.Builder
+
+		streamFunc := func(ctx context.Context, chunk []byte) error {
+			str := string(chunk)
+			if strings.HasPrefix(str, "[{") || strings.Contains(str, "\"tool_calls\"") {
+				return nil
+			}
+			contentBuffer.WriteString(str)
+			out <- str
+			return nil
+		}
+
+		resp, err := fetchAgentCall(ctx, messages, tools, 0.7, false, streamFunc)
+		if err != nil {
+			return err
+		}
+
+		choice := resp.Choices[0]
+
+		// 模型决定直接回复文本
+		if len(choice.ToolCalls) == 0 {
+			if contentBuffer.Len() > 0 || choice.Content != "" {
+				return nil
+			}
+			continue
+		}
+
+		// 模型决定调用工具 - 向用户同步动作
+		for _, tc := range choice.ToolCalls {
+			out <- fmt.Sprintf("\n\n> 🛠️ **系统正在执行**: `%s` ...\n\n", tc.FunctionCall.Name)
+		}
+
+		// 模型决定调用工具 - 记录模型意图
+		messages = append(messages, llms.MessageContent{
+			Role:  llms.ChatMessageTypeAI,
+			Parts: s.convertToolCallsToParts(choice.ToolCalls),
+		})
+
+		// 并行执行工具，并同步响应
+		toolMsgs, err := s.executeTools(ctx, choice.ToolCalls)
+		if err != nil {
+			return err
+		}
+		messages = append(messages, toolMsgs...)
+	}
+	out <- "\n\n抱歉，由于检索轮次过多，我无法在安全时间内为您总结结果。"
+	return nil
 }
 
-// 修改后的通用请求方法，支持工具注入
-func (s *AgentImpl) callLLMWithTools(ctx context.Context, messages []llms.MessageContent) (*llms.ContentResponse, error) {
-	if err := TextSem.Acquire(ctx, 1); err != nil {
+// ExecuteTools 通用的并行工具执行器
+func (s *AgentImpl) executeTools(ctx context.Context, toolCalls []llms.ToolCall) ([]llms.MessageContent, error) {
+	g, gCtx := errgroup.WithContext(ctx)
+	toolResponses := make([]llms.ContentPart, len(toolCalls))
+
+	for idx, tc := range toolCalls {
+		i, toolCall := idx, tc
+		g.Go(func() error {
+			handler := s.handler.GetHandleFunction(toolCall.FunctionCall.Name)
+			if handler == nil {
+				return fmt.Errorf("未定义的工具: %s", toolCall.FunctionCall.Name)
+			}
+
+			// 执行具体工具逻辑
+			result, err := handler(gCtx, toolCall.FunctionCall.Arguments)
+			if err != nil {
+				result = fmt.Sprintf("执行失败: %v", err)
+			}
+
+			toolResponses[i] = llms.ToolCallResponse{
+				ToolCallID: toolCall.ID,
+				Name:       toolCall.FunctionCall.Name,
+				Content:    result,
+			}
+			return nil
+		})
+	}
+
+	if err := g.Wait(); err != nil {
 		return nil, err
 	}
-	defer TextSem.Release(1)
 
-	return llmClient.GenerateContent(ctx, messages,
-		llms.WithModel(config.Cfg.LLM.TextModel),
-		llms.WithTemperature(0.7),
-		llms.WithTools([]llms.Tool{DefineGeneralSearchTool()}),
-	)
+	var msgs []llms.MessageContent
+	for _, tr := range toolResponses {
+		msgs = append(msgs, llms.MessageContent{
+			Role:  llms.ChatMessageTypeTool,
+			Parts: []llms.ContentPart{tr},
+		})
+	}
+	return msgs, nil
 }
 
-func (s *AgentImpl) executeSearchLogic(ctx context.Context, query string) (string, error) {
-	vector, err := fetchModelEmbedding(ctx, query)
-	if err != nil {
-		return "", err
+// convertToolCallsToParts 将工具调用转换为 ContentPart
+func (s *AgentImpl) convertToolCallsToParts(tcs []llms.ToolCall) []llms.ContentPart {
+	parts := make([]llms.ContentPart, len(tcs))
+	for i, tc := range tcs {
+		parts[i] = tc
 	}
-	posts, err := s.postRepo.HybridSearch(ctx, query, vector, 0, 10)
-	if err != nil {
-		return "", err
-	}
-	if len(posts) == 0 {
-		return "未找到任何相关的站内笔记。", nil
-	}
-	var builder strings.Builder
-	builder.WriteString("以下是为你找到的站内相关笔记，请参考：\n\n")
-
-	for i, post := range posts {
-		item := fmt.Sprintf("### 笔记 %d\n- **标题**: %s\n- **作者**: %s\n- **内容**: %s\n- **AI总结**: %s\n---\n",
-			i+1, post.Title, post.UserNickname, post.Content, post.AISummary)
-		builder.WriteString(item)
-	}
-	return builder.String(), nil
+	return parts
 }

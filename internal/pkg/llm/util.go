@@ -10,6 +10,8 @@ import (
 	"github.com/tmc/langchaingo/llms"
 )
 
+type StreamFunc func(ctx context.Context, chunk []byte) error
+
 func readPrompt(file string) string {
 	data, err := os.ReadFile(file)
 	if err != nil {
@@ -90,4 +92,31 @@ func fetchModelEmbedding(ctx context.Context, s string) ([]float32, error) {
 		return nil, errors.New("vector is empty")
 	}
 	return vectors[0], nil
+}
+
+func fetchAgentCall(ctx context.Context, messages []llms.MessageContent, tools []llms.Tool, temp float64, withImage bool, streamFunc StreamFunc) (*llms.ContentResponse, error) {
+	if err := TextSem.Acquire(ctx, 1); err != nil {
+		return nil, err
+	}
+	defer TextSem.Release(1)
+
+	model := config.Cfg.LLM.TextModel
+	if withImage {
+		model = config.Cfg.LLM.VisionModel
+	}
+
+	if streamFunc != nil {
+		return llmClient.GenerateContent(ctx, messages,
+			llms.WithModel(model),
+			llms.WithTemperature(temp),
+			llms.WithTools(tools),
+			llms.WithStreamingFunc(streamFunc),
+		)
+	}
+
+	return llmClient.GenerateContent(ctx, messages,
+		llms.WithModel(model),
+		llms.WithTemperature(temp),
+		llms.WithTools(tools),
+	)
 }
