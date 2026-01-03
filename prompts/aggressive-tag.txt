@@ -54,3 +54,4 @@
 
 # Output Requirement
 直接返回标准 JSON，不要包含 Markdown 标记或任何解释。
+请返回严格符合 RFC 8259 标准的 JSON 字符串，确保所有内部引号都已正确转义。

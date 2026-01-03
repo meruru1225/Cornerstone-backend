@@ -1,17 +1,17 @@
 package dto
 
 type PostBaseDTO struct {
-	ID           uint64   `json:"id"`
-	Title        string   `json:"title" binding:"required" validate:"min=1,max=255"`
-	Content      string   `json:"content" binding:"required" validate:"min=1,max=1000"`
-	Medias       []Medias `json:"Medias" validate:"max=9"`
-	MediaChanged bool     `json:"mediaChanged"`
+	ID      uint64          `json:"id"`
+	Title   string          `json:"title" binding:"required" validate:"min=1,max=255"`
+	Content string          `json:"content" binding:"required" validate:"min=1,max=1000"`
+	Medias  []MediasBaseDTO `json:"Medias" validate:"max=9"`
 }
 
-type Medias struct {
-	MediaName string  `json:"mediaName" binding:"required" validate:"min=1,max=255"`
-	MimeType  string  `json:"mimeType" binding:"required" validate:"min=1,max=255"`
-	Width     int     `json:"width" binding:"required" validate:"min=1"`
-	Height    int     `json:"height" binding:"required" validate:"min=1"`
-	CoverURL  *string `json:"coverUrl,omitempty"`
+type MediasBaseDTO struct {
+	MimeType string  `json:"mime_type" binding:"required" validate:"min=1,max=64"`
+	MediaURL string  `json:"url" binding:"required" validate:"min=1,max=512"`
+	Width    int     `json:"width" binding:"required" validate:"min=1"`
+	Height   int     `json:"height" binding:"required" validate:"min=1"`
+	Duration int     `json:"duration"`
+	CoverURL *string `json:"cover_url,omitempty"`
 }

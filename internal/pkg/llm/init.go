@@ -13,11 +13,13 @@ const ContentSensitive = "sensitive"
 var llmClient *openai.LLM
 
 var (
-	aggressiveTagPrompt  string
-	chatPrompt           string
-	contentProcessPrompt string
-	imageProcessPrompt   string
-	searchPrompt         string
+	aggressiveTagPrompt    string
+	chatPrompt             string
+	contentProcessPrompt   string
+	contentAuditOnlyPrompt string
+	imageProcessPrompt     string
+	imageAuditOnlyPrompt   string
+	searchPrompt           string
 )
 
 func InitLLM() error {
@@ -36,7 +38,9 @@ func InitLLM() error {
 	aggressiveTagPrompt = readPrompt(promptPath.AggressiveTag)
 	chatPrompt = readPrompt(promptPath.Chat)
 	contentProcessPrompt = readPrompt(promptPath.ContentProcess)
+	contentAuditOnlyPrompt = readPrompt(promptPath.ContentAuditOnly)
 	imageProcessPrompt = readPrompt(promptPath.ImageProcess)
+	imageAuditOnlyPrompt = readPrompt(promptPath.ImageAuditOnly)
 	searchPrompt = readPrompt(promptPath.Search)
 
 	log.Info("LLM Initial Success")

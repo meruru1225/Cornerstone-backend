@@ -3,6 +3,7 @@ package kafka
 import (
 	"Cornerstone/internal/api/config"
 	"Cornerstone/internal/pkg/es"
+	"Cornerstone/internal/pkg/processor"
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
@@ -28,6 +29,7 @@ type ConsumerManager struct {
 // NewConsumerManager 构造函数
 func NewConsumerManager(
 	cfg *config.Config,
+	contentProcessor processor.ContentLLMProcessor,
 	userESRepo es.UserRepo,
 	postESRepo es.PostRepo,
 	userDBRepo repository.UserRepo,
@@ -58,7 +60,7 @@ func NewConsumerManager(
 	if err != nil {
 		return nil, err
 	}
-	postsHandler := NewPostsHandler(userDBRepo, postDBRepo, postESRepo)
+	postsHandler := NewPostsHandler(userDBRepo, postDBRepo, postESRepo, contentProcessor)
 
 	return &ConsumerManager{
 		usersConsumer:       usersConsumer,

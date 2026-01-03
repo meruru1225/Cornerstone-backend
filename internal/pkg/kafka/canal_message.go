@@ -30,6 +30,7 @@ type CanalMessage struct {
 
 const (
 	INSERT = "INSERT"
+	UPDATE = "UPDATE"
 	DELETE = "DELETE"
 )
 

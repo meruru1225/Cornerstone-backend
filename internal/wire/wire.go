@@ -7,6 +7,7 @@ import (
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/kafka"
 	"Cornerstone/internal/pkg/llm"
+	"Cornerstone/internal/pkg/processor"
 	"Cornerstone/internal/repository"
 	"Cornerstone/internal/service"
 
@@ -37,6 +38,9 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	toolHandler := llm.NewToolHandler(postESRepo)
 	agent := llm.NewAgent(toolHandler)
 
+	// Processor
+	contentProcesser := processor.NewContentLLMProcessor()
+
 	// Service 实例
 	userService := service.NewUserService(userRepo, roleRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
@@ -54,7 +58,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	router := api.SetupRouter(handlers)
 
 	// Kafka 消费者管理
-	kafkaMgr, err := kafka.NewConsumerManager(cfg, userESRepo, postESRepo, userRepo, userFollowRepo, postRepo)
+	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, userFollowRepo, postRepo)
 	if err != nil {
 		return nil, err
 	}

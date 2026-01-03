@@ -36,11 +36,14 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 	if err := copier.Copy(post, postDTO); err != nil {
 		return err
 	}
+	if err := copier.Copy(&post.MediaList, &postDTO.Medias); err != nil {
+		return err
+	}
+
 	post.UserID = userID
 	post.ID = 0
 
-	postMedias := s.mapMedias(postDTO.Medias)
-	return s.postRepo.CreatePost(ctx, post, postMedias)
+	return s.postRepo.CreatePost(ctx, post)
 }
 
 // GetPostById 获取单个帖子
@@ -52,7 +55,7 @@ func (s *postServiceImpl) GetPostById(ctx context.Context, id uint64) (*dto.Post
 	return s.toPostDTO(post)
 }
 
-// GetPostByIds 批量获取
+// GetPostByIds 批量获取帖子
 func (s *postServiceImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*dto.PostDTO, error) {
 	posts, err := s.postRepo.GetPostByIds(ctx, ids)
 	if err != nil {
@@ -61,17 +64,16 @@ func (s *postServiceImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*dt
 	return s.batchToPostDTO(posts)
 }
 
-// GetPostByUserId 获取某人的帖子列表
+// GetPostByUserId 获取指定用户的公开帖子列表
 func (s *postServiceImpl) GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error) {
 	posts, err := s.postRepo.GetPostByUserId(ctx, userId, pageSize, (page-1)*pageSize)
 	if err != nil {
 		return nil, err
 	}
-
 	return s.batchToPostDTO(posts)
 }
 
-// GetPostSelf 获取自己的帖子列表
+// GetPostSelf 获取登录用户自己的帖子列表，含非公开状态
 func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error) {
 	posts, err := s.postRepo.GetPostSelf(ctx, userId, pageSize, (page-1)*pageSize)
 	if err != nil {
@@ -80,54 +82,51 @@ func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, 
 	return s.batchToPostDTO(posts)
 }
 
-// UpdatePostContent 更新帖子内容
+// UpdatePostContent 更新帖子内容及媒体
 func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error {
 	oldPost, err := s.postRepo.GetPost(ctx, postID)
 	if err != nil {
 		return err
 	}
-
 	if oldPost.UserID != userID {
 		return UnauthorizedError
 	}
 
 	post := &model.Post{}
-	if err := copier.Copy(post, postDTO); err != nil {
+	if err = copier.Copy(post, postDTO); err != nil {
 		return err
 	}
+	if err = copier.Copy(&post.MediaList, &postDTO.Medias); err != nil {
+		return err
+	}
+
 	post.ID = postID
 	post.UserID = userID
-	post.Status = 0
 
-	postMedias := s.mapMedias(postDTO.Medias)
-	return s.postRepo.UpdatePostContent(ctx, post, postMedias)
+	return s.postRepo.UpdatePostContent(ctx, post)
 }
 
-// DeletePost 删除帖子 (包含鉴权)
+// DeletePost 删除帖子
 func (s *postServiceImpl) DeletePost(ctx context.Context, userID uint64, postID uint64) error {
+	// 1. 鉴权
 	post, err := s.postRepo.GetPost(ctx, postID)
 	if err != nil {
 		return err
 	}
-
 	if post.UserID != userID {
 		return UnauthorizedError
 	}
-
 	return s.postRepo.DeletePost(ctx, postID)
 }
 
-// toPostDTO 转换 DTO
+// toPostDTO 将 Model 转换为返回给前端的 DTO
 func (s *postServiceImpl) toPostDTO(post *model.Post) (*dto.PostDTO, error) {
 	out := &dto.PostDTO{}
 	if err := copier.Copy(out, post); err != nil {
 		return nil, err
 	}
-
-	if len(post.Media) > 0 {
-		if err := copier.Copy(&out.Medias, post.Media); err != nil {
-			return nil, err
-		}
+	if err := copier.Copy(&out.Medias, &post.MediaList); err != nil {
+		return nil, err
 	}
 
 	if post.User.ID > 0 {
@@ -136,18 +135,18 @@ func (s *postServiceImpl) toPostDTO(post *model.Post) (*dto.PostDTO, error) {
 			out.Nickname = post.User.UserDetail.Nickname
 			out.AvatarURL = post.User.UserDetail.AvatarURL
 		} else {
-			out.Nickname = "用户" + strconv.FormatUint(post.User.ID, 10)
+			out.Nickname = "用户_" + strconv.FormatUint(post.User.ID, 10)
 			out.AvatarURL = "default_avatar.png"
 		}
 	} else {
-		out.UserID = 0
 		out.Nickname = "未知用户"
 		out.AvatarURL = "default_avatar.png"
 	}
+
 	return out, nil
 }
 
-// batchToPostDTO 批量转换 DTO
+// batchToPostDTO 批量转换辅助
 func (s *postServiceImpl) batchToPostDTO(posts []*model.Post) ([]*dto.PostDTO, error) {
 	out := make([]*dto.PostDTO, len(posts))
 	for i, post := range posts {
@@ -158,20 +157,4 @@ func (s *postServiceImpl) batchToPostDTO(posts []*model.Post) ([]*dto.PostDTO, e
 		out[i] = item
 	}
 	return out, nil
-}
-
-// mapMedias 转换 Medias
-func (s *postServiceImpl) mapMedias(dtos []dto.Medias) []*model.PostMedia {
-	postMedias := make([]*model.PostMedia, len(dtos))
-	for i, object := range dtos {
-		postMedias[i] = &model.PostMedia{
-			MediaURL:  object.MediaName,
-			FileType:  object.MimeType,
-			SortOrder: int8(i),
-			Width:     object.Width,
-			Height:    object.Height,
-			CoverURL:  object.CoverURL,
-		}
-	}
-	return postMedias
 }

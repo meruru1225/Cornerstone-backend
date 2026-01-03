@@ -3,23 +3,23 @@ package repository
 import (
 	"Cornerstone/internal/model"
 	"context"
-	log "log/slog"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type PostRepo interface {
-	CreatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error
+	CreatePost(ctx context.Context, post *model.Post) error
 	GetPost(ctx context.Context, id uint64) (*model.Post, error)
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error)
 	GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
-	GetPostMedias(ctx context.Context, postId uint64) ([]*model.PostMedia, error)
-	GetPostTagNames(ctx context.Context, postId uint64) ([]string, error)
-	UpdatePostContent(ctx context.Context, post *model.Post, media []*model.PostMedia) error
-	UpdatePostStatus(ctx context.Context, id uint64, status int) error
 	DeletePost(ctx context.Context, id uint64) error
-	UpsertPostTag(ctx context.Context, postID uint64, tagName string) error
+	UpdatePostContent(ctx context.Context, post *model.Post) error
+	UpdatePostStatus(ctx context.Context, id uint64, status int) error
+	GetPostMedias(ctx context.Context, postId uint64) (model.MediaList, error)
+	GetPostTagNames(ctx context.Context, postId uint64) ([]string, error)
+	SyncPostMainTag(ctx context.Context, postID uint64, tagName string) error
 }
 
 type PostRepoImpl struct {
@@ -32,15 +32,12 @@ func NewPostRepo(db *gorm.DB) PostRepo {
 	}
 }
 
-func (s *PostRepoImpl) CreatePost(ctx context.Context, post *model.Post, media []*model.PostMedia) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Create(post).Error; err != nil {
-			return err
-		}
-		return s.createPostAssociations(tx, post.ID, media)
-	})
+// CreatePost 创建笔记
+func (s *PostRepoImpl) CreatePost(ctx context.Context, post *model.Post) error {
+	return s.db.WithContext(ctx).Create(post).Error
 }
 
+// GetPost 获取单个笔记
 func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, error) {
 	var post model.Post
 	err := s.db.WithContext(ctx).
@@ -49,9 +46,6 @@ func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, err
 		}).
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
-		}).
-		Preload("Media", func(db *gorm.DB) *gorm.DB {
-			return db.Order("sort_order ASC")
 		}).
 		Where("id = ? AND is_deleted = ?", id, false).
 		First(&post).Error
@@ -62,6 +56,7 @@ func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, err
 	return &post, nil
 }
 
+// GetPostByIds 批量获取笔记
 func (s *PostRepoImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error) {
 	var posts []*model.Post
 	if len(ids) == 0 {
@@ -74,18 +69,13 @@ func (s *PostRepoImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*model
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
 		}).
-		Preload("Media", func(db *gorm.DB) *gorm.DB {
-			return db.Order("sort_order ASC")
-		}).
 		Where("id IN ? AND is_deleted = ?", ids, false).
 		Find(&posts).Error
 
-	if err != nil {
-		return nil, err
-	}
-	return posts, nil
+	return posts, err
 }
 
+// GetPostByUserId 获取他人主页已发布的笔记
 func (s *PostRepoImpl) GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error) {
 	var posts []*model.Post
 	err := s.db.WithContext(ctx).
@@ -95,20 +85,15 @@ func (s *PostRepoImpl) GetPostByUserId(ctx context.Context, userId uint64, limit
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
 		}).
-		Preload("Media", func(db *gorm.DB) *gorm.DB {
-			return db.Order("sort_order ASC")
-		}).
 		Where("user_id = ? AND is_deleted = ? AND status = ?", userId, false, 1).
 		Limit(limit).Offset(offset).
 		Order("created_at DESC").
 		Find(&posts).Error
 
-	if err != nil {
-		return nil, err
-	}
-	return posts, nil
+	return posts, err
 }
 
+// GetPostSelf 获取自己所有的笔记
 func (s *PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error) {
 	var posts []*model.Post
 	err := s.db.WithContext(ctx).
@@ -118,35 +103,26 @@ func (s *PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, of
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
 		}).
-		Preload("Media", func(db *gorm.DB) *gorm.DB {
-			return db.Order("sort_order ASC")
-		}).
 		Where("user_id = ? AND is_deleted = ?", userId, false).
 		Limit(limit).Offset(offset).
 		Order("created_at DESC").
 		Find(&posts).Error
 
-	if err != nil {
-		return nil, err
-	}
-	return posts, nil
+	return posts, err
 }
 
-func (s *PostRepoImpl) GetPostMedias(ctx context.Context, postId uint64) ([]*model.PostMedia, error) {
-	var medias []*model.PostMedia
-
+// GetPostMedias 从笔记 JSON 字段中直接提取媒体列表
+func (s *PostRepoImpl) GetPostMedias(ctx context.Context, postId uint64) (model.MediaList, error) {
+	var post model.Post
 	err := s.db.WithContext(ctx).
-		Select("id", "media_url", "file_type", "sort_order", "width", "height", "duration").
-		Where("post_id = ?", postId).
-		Order("sort_order ASC").
-		Find(&medias).Error
+		Select("media_list").
+		Where("id = ?", postId).
+		First(&post).Error
 
-	if err != nil {
-		return nil, err
-	}
-	return medias, nil
+	return post.MediaList, err
 }
 
+// GetPostTagNames 获取笔记关联的标签名称
 func (s *PostRepoImpl) GetPostTagNames(ctx context.Context, postId uint64) ([]string, error) {
 	var tagNames []string
 	err := s.db.WithContext(ctx).
@@ -155,70 +131,47 @@ func (s *PostRepoImpl) GetPostTagNames(ctx context.Context, postId uint64) ([]st
 		Joins("JOIN tags ON post_tags.tag_id = tags.id").
 		Where("post_tags.post_id = ?", postId).
 		Find(&tagNames).Error
-	if err != nil {
-		return nil, err
+
+	return tagNames, err
+}
+
+// UpdatePostContent 更新内容与媒体
+func (s *PostRepoImpl) UpdatePostContent(ctx context.Context, post *model.Post) error {
+	updateData := map[string]interface{}{
+		"title":      post.Title,
+		"content":    post.Content,
+		"media_list": post.MediaList,
+		"status":     0,
 	}
-
-	return tagNames, nil
+	// 仅限作者本人修改，且不涉及任何关联表操作，性能极高
+	return s.db.WithContext(ctx).Model(&model.Post{}).
+		Where("id = ? AND user_id = ?", post.ID, post.UserID).
+		Updates(updateData).Error
 }
 
-func (s *PostRepoImpl) UpdatePostContent(ctx context.Context, post *model.Post, media []*model.PostMedia) error {
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostMedia{}).Error; err != nil {
-			return err
-		}
-		if err := tx.Where("post_id = ?", post.ID).Delete(&model.PostTag{}).Error; err != nil {
-			return err
-		}
-		updateData := map[string]interface{}{
-			"title":           post.Title,
-			"content":         post.Content,
-			"content_version": gorm.Expr("content_version + 1"),
-		}
-		if err := tx.Model(&model.Post{}).Where("id = ?", post.ID).Updates(updateData).Error; err != nil {
-			return err
-		}
-		return s.createPostAssociations(tx, post.ID, media)
-	})
-}
-
+// UpdatePostStatus 更新笔记状态
 func (s *PostRepoImpl) UpdatePostStatus(ctx context.Context, id uint64, status int) error {
 	return s.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Update("status", status).Error
 }
 
+// DeletePost 逻辑删除
 func (s *PostRepoImpl) DeletePost(ctx context.Context, id uint64) error {
 	return s.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Update("is_deleted", true).Error
 }
 
-func (s *PostRepoImpl) UpsertPostTag(ctx context.Context, postID uint64, tagName string) error {
-	var newTag model.Tag
-	err := s.db.WithContext(ctx).Select("id").Where("name = ?", tagName).First(&newTag).Error
+// SyncPostMainTag 同步 AI 计算出的主标签
+func (s *PostRepoImpl) SyncPostMainTag(ctx context.Context, postID uint64, tagName string) error {
+	var tag model.Tag
+	err := s.db.WithContext(ctx).Select("id").Where("name = ?", tagName).First(&tag).Error
 	if err != nil {
-		log.Warn("tag not found", "name", tagName)
 		return nil
 	}
 
-	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		if err = tx.Where("post_id = ?", postID).Delete(&model.PostTag{}).Error; err != nil {
-			return err
-		}
-		postTag := model.PostTag{
-			PostID: postID,
-			TagID:  newTag.ID,
-		}
-		return tx.Create(&postTag).Error
-	})
-}
-
-func (s *PostRepoImpl) createPostAssociations(tx *gorm.DB, postID uint64, media []*model.PostMedia) error {
-	if len(media) > 0 {
-		for i := range media {
-			media[i].PostID = postID
-			media[i].ID = 0
-		}
-		if err := tx.Create(media).Error; err != nil {
-			return err
-		}
-	}
-	return nil
+	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
+		Columns:   []clause.Column{{Name: "post_id"}},
+		DoUpdates: clause.AssignmentColumns([]string{"tag_id"}),
+	}).Create(&model.PostTag{
+		PostID: postID,
+		TagID:  tag.ID,
+	}).Error
 }

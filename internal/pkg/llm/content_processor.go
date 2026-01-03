@@ -10,7 +10,7 @@ import (
 	"github.com/goccy/go-json"
 )
 
-func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) {
+func ImageProcess(ctx context.Context, urls []string, auditOnly bool) (*ContentResponse, error) {
 	if len(urls) == 0 {
 		return GetPassResponse(), nil
 	}
@@ -18,7 +18,12 @@ func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) 
 		return GetWarnResponse(), nil
 	}
 
-	resp, err := fetchModelByPicUrls(ctx, imageProcessPrompt, urls, 0.1)
+	prompt := imageProcessPrompt
+	if auditOnly {
+		prompt = imageAuditOnlyPrompt
+	}
+
+	resp, err := fetchModelByPicUrls(ctx, prompt, urls, 0.1)
 	if err != nil {
 		log.ErrorContext(ctx, "图像处理-AI大模型请求失败", "err", err)
 		return nil, err
@@ -33,7 +38,7 @@ func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) 
 
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
-			log.ErrorContext(ctx, "图像处理-AI大模型返回数据解析失败", "err", err)
+			log.ErrorContext(ctx, "图像处理-AI大模型返回数据解析失败", "err", err, "resp", resp.Choices[0].Content)
 			return nil, err
 		}
 		return contentResp, nil
@@ -41,14 +46,19 @@ func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) 
 	return nil, errors.New("图像处理-AI大模型返回数据为空")
 }
 
-func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, error) {
+func ContentProcess(ctx context.Context, content *Content, auditOnly bool) (*ContentResponse, error) {
+	prompt := contentProcessPrompt
+	if auditOnly {
+		prompt = contentAuditOnlyPrompt
+	}
+
 	contentJSON, err := json.Marshal(content)
 	if err != nil {
 		log.ErrorContext(ctx, "内容处理-AI大模型请求数据序列化失败", "err", err)
 		return nil, err
 	}
 
-	resp, err := fetchModel(ctx, contentProcessPrompt, string(contentJSON), 0.1)
+	resp, err := fetchModel(ctx, prompt, string(contentJSON), 0.1)
 	if err != nil {
 		log.ErrorContext(ctx, "内容处理-AI大模型请求失败", "err", err)
 		return nil, err
@@ -63,7 +73,7 @@ func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, er
 
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
-			log.ErrorContext(ctx, "内容处理-AI大模型返回数据解析失败", "err", err)
+			log.ErrorContext(ctx, "内容处理-AI大模型返回数据解析失败", "err", err, "resp", resp.Choices[0].Content)
 			return nil, err
 		}
 		return contentResp, nil
@@ -92,7 +102,7 @@ func Aggressive(ctx context.Context, payload *TagAggressive) (*ContentResponse, 
 
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
-			log.ErrorContext(ctx, "标签聚合-AI大模型返回数据解析失败", "err", err)
+			log.ErrorContext(ctx, "标签聚合-AI大模型返回数据解析失败", "err", err, "resp", resp.Choices[0].Content)
 			return nil, err
 		}
 		log.InfoContext(ctx, "标签聚合-AI大模型请求成功", "resp", resp)

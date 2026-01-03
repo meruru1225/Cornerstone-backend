@@ -30,7 +30,9 @@ llm:
     aggressive_tag: "./prompts/aggressive-tag.txt"
     chat: "./prompts/chat.txt"
     content_process: "./prompts/content-process.txt"
+    content_audit_only: "./prompts/content-audit-only.txt"
     image_process: "./prompts/image-process.txt"
+    image_audit_only: "./prompts/image-audit-only.txt"
     search: "./prompts/search.txt"
 
 minio:

@@ -6,6 +6,8 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"image"
+	"image/jpeg"
 	"io"
 	"os"
 	"os/exec"
@@ -13,6 +15,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/disintegration/imaging"
 	"github.com/liuzl/gocc"
 )
 
@@ -97,6 +100,19 @@ func GetImageFrames(ctx context.Context, mediaUrl string, duration float64) ([]i
 		return nil, err
 	}
 	return frames, nil
+}
+
+func ResizeImage(imgData io.Reader, width, height, quality int) (io.Reader, error) {
+	src, _, err := image.Decode(imgData)
+	if err != nil {
+		return nil, err
+	}
+
+	dst := imaging.Resize(src, width, height, imaging.Lanczos)
+
+	buf := new(bytes.Buffer)
+	err = jpeg.Encode(buf, dst, &jpeg.Options{Quality: quality})
+	return buf, err
 }
 
 // AudioStreamToText 音频转文字

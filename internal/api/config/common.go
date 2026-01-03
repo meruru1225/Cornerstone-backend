@@ -56,11 +56,13 @@ type LLMConfig struct {
 }
 
 type PromptPathConfig struct {
-	AggressiveTag  string `mapstructure:"aggressive_tag"`
-	Chat           string `mapstructure:"chat"`
-	ContentProcess string `mapstructure:"content_process"`
-	ImageProcess   string `mapstructure:"image_process"`
-	Search         string `mapstructure:"search"`
+	AggressiveTag    string `mapstructure:"aggressive_tag"`
+	Chat             string `mapstructure:"chat"`
+	ContentProcess   string `mapstructure:"content_process"`
+	ContentAuditOnly string `mapstructure:"content_audit_only"`
+	ImageProcess     string `mapstructure:"image_process"`
+	ImageAuditOnly   string `mapstructure:"image_audit_only"`
+	Search           string `mapstructure:"search"`
 }
 
 // MinIOConfig MinIO配置
