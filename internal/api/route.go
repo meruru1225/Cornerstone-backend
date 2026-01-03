@@ -2,14 +2,20 @@ package api
 
 import (
 	"Cornerstone/internal/api/middleware"
+	"Cornerstone/internal/pkg/logger"
 	"net/http"
 
 	"github.com/gin-gonic/gin"
 )
 
 func SetupRouter(group *HandlersGroup) *gin.Engine {
-	r := gin.Default()
+	r := gin.New()
 	_ = r.SetTrustedProxies([]string{"localhost"})
+
+	// TraceId & Logger
+	r.Use(middleware.TraceMiddleware())
+	r.Use(middleware.AuditMiddleware())
+	logger.SetupGin(r)
 
 	apiGroup := r.Group("/api")
 	{

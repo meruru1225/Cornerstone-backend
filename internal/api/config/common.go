@@ -9,6 +9,7 @@ type Config struct {
 	LLM                      LLMConfig               `mapstructure:"llm"`
 	MinIO                    MinIOConfig             `mapstructure:"minio"`
 	Elastic                  ElasticConfig           `mapstructure:"elastic"`
+	Logstash                 LogstashConfig          `mapstructure:"logstash"`
 	LibPath                  LibPathConfig           `mapstructure:"lib_path"`
 	Kafka                    KafkaConfig             `mapstructure:"kafka"`
 	KafkaUserConsumer        KafkaUserConsumer       `mapstructure:"kafka_user_consumer"`
@@ -85,6 +86,12 @@ type ElasticConfig struct {
 type ElasticIndices struct {
 	UserIndex string `mapstructure:"user_index"`
 	PostIndex string `mapstructure:"post_index"`
+}
+
+type LogstashConfig struct {
+	Address string `mapstructure:"address"`
+	Index   string `mapstructure:"index"`
+	Token   string `mapstructure:"token"`
 }
 
 // LibPathConfig 库路径

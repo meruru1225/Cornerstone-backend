@@ -49,6 +49,11 @@ elastic:
     user_index: "{{ELASTIC_USER_INDEX}}"
     post_index: "{{ELASTIC_POST_INDEX}}"
 
+logstash:
+  address: "{{LOGSTASH_ADDRESS}}"
+  index: "{{LOGSTASH_INDEX}}"
+  token: "{{LOGSTASH_TOKEN}}"
+
 lib_path:
   ffmpeg: "lib/ffmpeg/ffmpeg.exe"
   ffprobe: "lib/ffmpeg/ffprobe.exe"

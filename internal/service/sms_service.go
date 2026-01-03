@@ -29,7 +29,7 @@ func (s *SmsServiceImpl) SendSms(ctx context.Context, phone string) error {
 	if err != nil {
 		return err
 	}
-	err = util.SendSms(phone, code)
+	err = util.SendSms(ctx, phone, code)
 	if err != nil {
 		return err
 	}

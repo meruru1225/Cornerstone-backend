@@ -20,11 +20,11 @@ func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) 
 
 	resp, err := fetchModelByPicUrls(ctx, imageProcessPrompt, urls, 0.1)
 	if err != nil {
-		log.Error("图像处理-AI大模型请求失败", "err", err)
+		log.ErrorContext(ctx, "图像处理-AI大模型请求失败", "err", err)
 		return nil, err
 	}
 
-	log.Info("图像处理-AI大模型请求成功", "resp", resp)
+	log.InfoContext(ctx, "图像处理-AI大模型请求成功", "resp", resp)
 
 	if len(resp.Choices) > 0 {
 		if resp.Choices[0].StopReason == ContentSensitive {
@@ -33,7 +33,7 @@ func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) 
 
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
-			log.Error("图像处理-AI大模型返回数据解析失败", "err", err)
+			log.ErrorContext(ctx, "图像处理-AI大模型返回数据解析失败", "err", err)
 			return nil, err
 		}
 		return contentResp, nil
@@ -44,17 +44,17 @@ func ImageProcess(ctx context.Context, urls []string) (*ContentResponse, error) 
 func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, error) {
 	contentJSON, err := json.Marshal(content)
 	if err != nil {
-		log.Error("内容处理-AI大模型请求数据序列化失败", "err", err)
+		log.ErrorContext(ctx, "内容处理-AI大模型请求数据序列化失败", "err", err)
 		return nil, err
 	}
 
 	resp, err := fetchModel(ctx, contentProcessPrompt, string(contentJSON), 0.1)
 	if err != nil {
-		log.Error("内容处理-AI大模型请求失败", "err", err)
+		log.ErrorContext(ctx, "内容处理-AI大模型请求失败", "err", err)
 		return nil, err
 	}
 
-	log.Info("内容处理-AI大模型请求成功", "resp", resp)
+	log.InfoContext(ctx, "内容处理-AI大模型请求成功", "resp", resp)
 
 	if len(resp.Choices) > 0 {
 		if resp.Choices[0].StopReason == ContentSensitive {
@@ -63,7 +63,7 @@ func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, er
 
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
-			log.Error("内容处理-AI大模型返回数据解析失败", "err", err)
+			log.ErrorContext(ctx, "内容处理-AI大模型返回数据解析失败", "err", err)
 			return nil, err
 		}
 		return contentResp, nil
@@ -75,13 +75,13 @@ func ContentProcess(ctx context.Context, content *Content) (*ContentResponse, er
 func Aggressive(ctx context.Context, payload *TagAggressive) (*ContentResponse, error) {
 	payloadJson, err := json.Marshal(payload)
 	if err != nil {
-		log.Error("内容聚合-AI大模型请求数据序列化失败", "err", err)
+		log.ErrorContext(ctx, "内容聚合-AI大模型请求数据序列化失败", "err", err)
 		return nil, err
 	}
 
 	resp, err := fetchModel(ctx, aggressiveTagPrompt, string(payloadJson), 0.1)
 	if err != nil {
-		log.Error("内容聚合-AI大模型请求失败", "err", err)
+		log.ErrorContext(ctx, "内容聚合-AI大模型请求失败", "err", err)
 		return nil, err
 	}
 
@@ -92,10 +92,10 @@ func Aggressive(ctx context.Context, payload *TagAggressive) (*ContentResponse, 
 
 		contentResp, err := GetContentResponse(resp.Choices[0].Content)
 		if err != nil {
-			log.Error("标签聚合-AI大模型返回数据解析失败", "err", err)
+			log.ErrorContext(ctx, "标签聚合-AI大模型返回数据解析失败", "err", err)
 			return nil, err
 		}
-		log.Info("标签聚合-AI大模型请求成功", "resp", resp)
+		log.InfoContext(ctx, "标签聚合-AI大模型请求成功", "resp", resp)
 		return contentResp, nil
 	}
 
@@ -109,9 +109,9 @@ func GetVector(ctx context.Context, content *Content, tags []string, summary str
 	s := fmt.Sprintf("Title: %s\nContent: %s\nTags: %s\nSummary: %s\n", content.Title, content.Content, strings.Join(tags, ","), summary)
 	vector, err := fetchModelEmbedding(ctx, s)
 	if err != nil {
-		log.Error("内容处理-AI大模型向量获取失败", "err", err)
+		log.ErrorContext(ctx, "内容处理-AI大模型向量获取失败", "err", err)
 		return nil, err
 	}
-	log.Info("内容处理-AI大模型向量获取成功", "vector", vector)
+	log.InfoContext(ctx, "内容处理-AI大模型向量获取成功", "vector", vector)
 	return vector, nil
 }

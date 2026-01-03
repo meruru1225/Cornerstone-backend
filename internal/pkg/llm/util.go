@@ -40,7 +40,7 @@ func fetchModel(ctx context.Context, systemPrompt string, userPrompt string, tem
 			},
 		},
 	}
-	log.Info("正在请求AI大模型")
+	log.InfoContext(ctx, "正在请求AI大模型")
 	return llmClient.GenerateContent(ctx, messages,
 		llms.WithModel(config.Cfg.LLM.TextModel),
 		llms.WithTemperature(temp),
@@ -69,7 +69,7 @@ func fetchModelByPicUrls(ctx context.Context, systemPrompt string, picUrls []str
 			Parts: contentPart,
 		},
 	}
-	log.Info("正在请求AI大模型")
+	log.InfoContext(ctx, "正在请求AI大模型")
 	return llmClient.GenerateContent(ctx, messages,
 		llms.WithModel(config.Cfg.LLM.VisionModel),
 		llms.WithTemperature(temp),
@@ -82,7 +82,7 @@ func fetchModelEmbedding(ctx context.Context, s string) ([]float32, error) {
 	}
 	defer EmbedSem.Release(1)
 
-	log.Info("正在请求AI大模型")
+	log.InfoContext(ctx, "正在请求AI大模型")
 
 	vectors, err := llmClient.CreateEmbedding(ctx, []string{s})
 	if err != nil {

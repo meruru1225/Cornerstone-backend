@@ -2,6 +2,7 @@ package util
 
 import (
 	"Cornerstone/internal/api/config"
+	"context"
 	"fmt"
 	"io"
 	log "log/slog"
@@ -14,13 +15,13 @@ import (
 const SuccessResp = "0"
 const digits = "0123456789"
 
-func SendSms(phone string, code string) error {
+func SendSms(ctx context.Context, phone string, code string) error {
 	smsCfg := config.Cfg.SMS
 	content := url.QueryEscape(fmt.Sprintf("【CornerStone】您的验证码为 %s 。", code))
 	fullUrl := fmt.Sprintf("%s?u=%s&p=%s&m=%s&c=%s", smsCfg.URL, smsCfg.Username, smsCfg.ApiKey, phone, content)
 
-	log.Info(fmt.Sprintf("调用短信接口: %s", fullUrl))
-	log.Info(fmt.Sprintf("发送给 %s 的验证码为 %s", phone, code))
+	log.InfoContext(ctx, fmt.Sprintf("调用短信接口: %s", fullUrl))
+	log.InfoContext(ctx, fmt.Sprintf("发送给 %s 的验证码为 %s", phone, code))
 
 	client := http.Client{Timeout: 10 * time.Second}
 	request, err := http.NewRequest(http.MethodGet, fullUrl, nil)
@@ -41,7 +42,7 @@ func SendSms(phone string, code string) error {
 	if string(body) != SuccessResp {
 		return fmt.Errorf("sms send failed: response code %s", string(body))
 	}
-	log.Info(fmt.Sprintf("短信接口响应: %s", string(body)))
+	log.InfoContext(ctx, fmt.Sprintf("短信接口响应: %s", string(body)))
 	return nil
 }
 

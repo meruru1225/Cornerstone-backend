@@ -5,6 +5,7 @@ import (
 	"Cornerstone/internal/pkg/database"
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/llm"
+	"Cornerstone/internal/pkg/logger"
 	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/wire"
@@ -21,15 +22,15 @@ import (
 )
 
 func main() {
-	// 初始化日志
-	InitLogger()
-
 	// 加载配置
 	if err := config.LoadConfig(); err != nil {
 		log.Error("Fatal error: failed to load configuration", "err", err)
 		panic(err)
 	}
 	cfg := config.Cfg
+
+	// 初始化日志
+	logger.InitLogger()
 
 	// 数据库连接
 	dbCfg := cfg.DB
@@ -122,13 +123,4 @@ func main() {
 		log.Error("App exited with error", "err", err)
 	}
 	log.Info("App exited successfully.")
-}
-
-func InitLogger() {
-	handler := log.NewJSONHandler(os.Stdout, &log.HandlerOptions{
-		Level: log.LevelDebug,
-	})
-
-	logger := log.New(handler)
-	log.SetDefault(logger)
 }
