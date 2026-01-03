@@ -125,3 +125,16 @@ func GetVector(ctx context.Context, content *Content, tags []string, summary str
 	log.InfoContext(ctx, "内容处理-AI大模型向量获取成功", "vector", vector)
 	return vector, nil
 }
+
+func GetVectorByString(ctx context.Context, s string) ([]float32, error) {
+	if s == "" {
+		return nil, errors.New("内容处理-AI大模型返回数据为空")
+	}
+	vector, err := fetchModelEmbedding(ctx, s)
+	if err != nil {
+		log.ErrorContext(ctx, "内容处理-AI大模型向量获取失败", "err", err)
+		return nil, err
+	}
+	log.InfoContext(ctx, "内容处理-AI大模型向量获取成功", "vector", vector)
+	return vector, nil
+}

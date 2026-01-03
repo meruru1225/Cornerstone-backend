@@ -1,10 +1,10 @@
 package dto
 
 type PostBaseDTO struct {
-	ID      uint64          `json:"id"`
-	Title   string          `json:"title" binding:"required" validate:"min=1,max=255"`
-	Content string          `json:"content" binding:"required" validate:"min=1,max=1000"`
-	Medias  []MediasBaseDTO `json:"Medias" validate:"max=9"`
+	ID      uint64           `json:"id"`
+	Title   string           `json:"title" binding:"required" validate:"min=1,max=255"`
+	Content string           `json:"content" binding:"required" validate:"min=1,max=1000"`
+	Medias  []*MediasBaseDTO `json:"Medias" validate:"max=9"`
 }
 
 type MediasBaseDTO struct {
