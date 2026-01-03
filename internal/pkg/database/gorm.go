@@ -2,13 +2,13 @@ package database
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/logger"
 	"fmt"
 	log "log/slog"
 	"time"
 
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
-	"gorm.io/gorm/logger"
 )
 
 // NewGormDB 初始化并返回 *gorm.DB 实例，处理连接池配置
@@ -18,7 +18,7 @@ func NewGormDB(cfg *config.DBConfig) (*gorm.DB, error) {
 	dialector = mysql.Open(cfg.DSN)
 
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.Default.LogMode(logger.Info),
+		Logger: logger.NewGormLogger(),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)
