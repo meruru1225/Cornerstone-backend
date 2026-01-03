@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/logger"
 	"context"
 	"errors"
 	log "log/slog"
@@ -10,6 +11,7 @@ import (
 
 	"github.com/IBM/sarama"
 	"github.com/goccy/go-json"
+	"github.com/google/uuid"
 )
 
 type LogicFunc func(ctx context.Context, msg *sarama.ConsumerMessage) error
@@ -52,34 +54,57 @@ func pullMessageBatch(session sarama.ConsumerGroupSession, claim sarama.Consumer
 // processBatch 并发处理一批消息
 func processBatch(session sarama.ConsumerGroupSession, messages []*sarama.ConsumerMessage, logic LogicFunc) {
 	var wg sync.WaitGroup
+	cfg := config.Cfg.Kafka.Consumer
 
-	for _, msg := range messages {
+	for i, msg := range messages {
 		wg.Add(1)
 
-		go func(m *sarama.ConsumerMessage) {
-			defer wg.Done()
-			var retryInterval = 100 * time.Millisecond
+		go func(idx int, m *sarama.ConsumerMessage) {
+			traceID := "job-" + uuid.NewString()
+			ctx := context.WithValue(session.Context(), logger.TraceIDKey, traceID)
 
-			for {
-				err := logic(session.Context(), m)
+			defer wg.Done()
+			defer func() {
+				if r := recover(); r != nil {
+					log.ErrorContext(ctx, "panic in kafka worker", "recover", r)
+				}
+			}()
+
+			log.InfoContext(ctx, "kafka message consumer start", "topic", m.Topic, "partition", m.Partition, "offset", m.Offset)
+
+			maxRetries := cfg.MaxRetries
+			retryInterval := time.Duration(cfg.RetryInterval) * time.Millisecond
+
+			for retry := 0; ; retry++ {
+				err := logic(ctx, m)
 				if err == nil {
+					log.InfoContext(ctx, "kafka message processed successfully", "message index", idx)
 					break
 				}
+
+				if maxRetries != -1 && retry >= maxRetries {
+					log.ErrorContext(ctx, "reached max retries, dropping message", "err", err, "attempts", retry+1)
+					break
+				}
+
 				select {
-				case <-session.Context().Done():
+				case <-ctx.Done():
 					return
 				default:
 				}
 
-				log.Error("process message error", "err", err)
-				time.Sleep(retryInterval)
+				select {
+				case <-ctx.Done():
+					return
+				case <-time.After(retryInterval):
+				}
 
 				retryInterval *= 2
 				if retryInterval > 5*time.Second {
 					retryInterval = 5 * time.Second
 				}
 			}
-		}(msg)
+		}(i, msg)
 	}
 
 	wg.Wait()

@@ -121,6 +121,8 @@ type ConsumerConfig struct {
 	HeartbeatInterval int `mapstructure:"heartbeat_interval"`
 	RebalanceTimeout  int `mapstructure:"rebalance_timeout"`
 	MaxProcessingTime int `mapstructure:"max_processing_time"`
+	MaxRetries        int `mapstructure:"max_retries"`
+	RetryInterval     int `mapstructure:"retry_interval"`
 }
 
 type KafkaUserConsumer struct {

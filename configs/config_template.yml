@@ -38,7 +38,8 @@ minio:
   external_endpoint: "{{MINIO_ENDPOINT}}"
   access_key: "{{MINIO_ACCESS_KEY}}"
   secret_key: "{{MINIO_SECRET_KEY}}"
-  bucket: "{{MINIO_BUCKET}}"
+  main_bucket: "{{MINIO_BUCKET}}"
+  temp_bucket: "{{MINIO_BUCKET}}"
   internal_use_ssl: false
 
 elastic:
@@ -74,6 +75,8 @@ kafka:
     heartbeat_interval: 3
     rebalance_timeout: 180
     max_processing_time: 60
+    max_retries: -1
+    retry_interval: 100
 
 kafka_user_consumer:
   topic: "{{KAFKA_USER_TOPIC}}"
