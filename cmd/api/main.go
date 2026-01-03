@@ -81,6 +81,25 @@ func main() {
 	defer cancel()
 	g, ctx := errgroup.WithContext(ctx)
 
+	// 定时任务
+	err = cron.InitCron(app.CronMgr)
+	if err != nil {
+		log.Error("Fatal error: failed to start cron jobs", "err", err)
+		panic(err)
+	}
+	g.Go(func() error {
+		<-ctx.Done()
+		log.Info("Cron Jobs stopping...")
+		app.CronMgr.Stop()
+		return nil
+	})
+
+	// Kafka 消费者
+	g.Go(func() error {
+		log.Info("Kafka Consumers starting...")
+		return app.KafkaManager.Start(ctx, cfg)
+	})
+
 	// HTTP 服务器
 	srv := &http.Server{
 		Addr:    ":8080",
@@ -94,25 +113,7 @@ func main() {
 		return nil
 	})
 
-	// 定时任务
-	g.Go(func() error {
-		err = cron.InitCron(app.CronMgr)
-		if err != nil {
-			log.Error("Fatal error: failed to start cron jobs", "err", err)
-			panic(err)
-		}
-		<-ctx.Done()
-		log.Info("Cron Jobs stopping...")
-		app.CronMgr.Stop()
-		return nil
-	})
-
-	// Kafka 消费者
-	g.Go(func() error {
-		log.Info("Kafka Consumers starting...")
-		return app.KafkaManager.Start(ctx, cfg)
-	})
-
+	// 优雅退出
 	g.Go(func() error {
 		quit := make(chan os.Signal, 1)
 		signal.Notify(quit, syscall.SIGINT, syscall.SIGTERM)
