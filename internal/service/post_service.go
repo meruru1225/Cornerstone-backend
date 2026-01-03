@@ -35,6 +35,7 @@ func NewPostService(postESRepo es.PostRepo, postDBRepo repository.PostRepo) Post
 	}
 }
 
+// SearchPost 搜索帖子
 func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, pageSize int) ([]*dto.PostDTO, error) {
 	vector, err := llm.GetVectorByString(ctx, keyword)
 	if err != nil {

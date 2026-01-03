@@ -2,6 +2,7 @@ package main
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/cron"
 	"Cornerstone/internal/pkg/database"
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/llm"
@@ -87,9 +88,22 @@ func main() {
 	}
 	g.Go(func() error {
 		log.Info("HTTP Server starting...")
-		if err := srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		if err = srv.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
 			return err
 		}
+		return nil
+	})
+
+	// 定时任务
+	g.Go(func() error {
+		err = cron.InitCron(app.CronMgr)
+		if err != nil {
+			log.Error("Fatal error: failed to start cron jobs", "err", err)
+			panic(err)
+		}
+		<-ctx.Done()
+		log.Info("Cron Jobs stopping...")
+		app.CronMgr.Stop()
 		return nil
 	})
 
@@ -113,13 +127,13 @@ func main() {
 
 		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer shutdownCancel()
-		if err := srv.Shutdown(shutdownCtx); err != nil {
+		if err = srv.Shutdown(shutdownCtx); err != nil {
 			log.Error("HTTP Server shutdown failed", "err", err)
 		}
 		return nil
 	})
 
-	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+	if err = g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		log.Error("App exited with error", "err", err)
 	}
 	log.Info("App exited successfully.")

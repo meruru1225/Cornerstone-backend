@@ -4,6 +4,8 @@ import (
 	"Cornerstone/internal/api"
 	"Cornerstone/internal/api/config"
 	"Cornerstone/internal/api/handler"
+	"Cornerstone/internal/job"
+	"Cornerstone/internal/pkg/cron"
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/kafka"
 	"Cornerstone/internal/pkg/llm"
@@ -19,6 +21,7 @@ import (
 type ApplicationContainer struct {
 	Router       *gin.Engine
 	DB           *gorm.DB
+	CronMgr      *cron.Manager
 	KafkaManager *kafka.ConsumerManager
 }
 
@@ -46,7 +49,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
 	smsService := service.NewSmsService()
-	postService := service.NewPostService(postRepo)
+	postService := service.NewPostService(postESRepo, postRepo)
 
 	handlers := &api.HandlersGroup{
 		AgentHandler:      handler.NewAgentHandler(agent),
@@ -56,6 +59,10 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	}
 
 	router := api.SetupRouter(handlers)
+
+	// Cron 任务
+	interestJob := job.NewUserInterestJob(userRepo)
+	cronMgr := cron.NewCronManager(interestJob)
 
 	// Kafka 消费者管理
 	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, userFollowRepo, postRepo)
@@ -67,6 +74,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	return &ApplicationContainer{
 		Router:       router,
 		DB:           db,
+		CronMgr:      cronMgr,
 		KafkaManager: kafkaMgr,
 	}, nil
 }
