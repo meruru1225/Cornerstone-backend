@@ -12,6 +12,7 @@ const (
 	UserFollowDirtyKey    = "user:follow:dirty"
 	UserMetrics7DaysKey   = "user:metrics:7days:"
 	UserMetrics30DaysKey  = "user:metrics:30days:"
+	UserInterestKey       = "user:interest:"
 	PostDirtyKey          = "post:dirty"
 )
 

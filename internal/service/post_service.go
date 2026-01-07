@@ -3,22 +3,29 @@ package service
 import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/llm"
+	"Cornerstone/internal/pkg/minio"
+	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
 	"context"
+	log "log/slog"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/jinzhu/copier"
 )
 
 type PostService interface {
-	SearchPost(ctx context.Context, keyword string, page, pageSize int) ([]*dto.PostDTO, error)
+	RecommendPost(ctx context.Context, userID uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error
-	GetPostById(ctx context.Context, id uint64) (*dto.PostDTO, error)
+	GetPostById(ctx context.Context, userID uint64, postID uint64) (*dto.PostDTO, error)
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*dto.PostDTO, error)
-	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error)
-	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error)
+	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
 	DeletePost(ctx context.Context, userID uint64, postID uint64) error
 }
@@ -35,17 +42,54 @@ func NewPostService(postESRepo es.PostRepo, postDBRepo repository.PostRepo) Post
 	}
 }
 
+func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	key := consts.UserInterestKey + strconv.FormatUint(userID, 10)
+	from := (page - 1) * pageSize
+
+	tags, err := redis.ZRevRange(ctx, key, 0, 9)
+	if err != nil {
+		log.ErrorContext(ctx, "get user interests from redis error", "err", err, "userID", userID)
+	}
+
+	if len(tags) > 0 {
+		interestText := strings.Join(tags, " ")
+
+		vector, err := llm.GetVectorByString(ctx, interestText)
+		if err != nil {
+			return nil, err
+		}
+
+		return getWaterfallPosts(pageSize,
+			func() ([]*es.PostES, error) {
+				return s.postESRepo.HybridSearch(ctx, interestText, vector, from, pageSize+1)
+			},
+			s.batchToPostDTOByES,
+		)
+	}
+
+	return getWaterfallPosts(pageSize,
+		func() ([]*es.PostES, error) {
+			return s.postESRepo.GetLatestPosts(ctx, from, pageSize+1)
+		},
+		s.batchToPostDTOByES,
+	)
+}
+
 // SearchPost 搜索帖子
-func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, pageSize int) ([]*dto.PostDTO, error) {
+func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error) {
 	vector, err := llm.GetVectorByString(ctx, keyword)
 	if err != nil {
 		return nil, err
 	}
-	posts, err := s.postESRepo.HybridSearch(ctx, keyword, vector, page, pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return s.batchToPostDTOByES(posts)
+
+	from := (page - 1) * pageSize
+
+	return getWaterfallPosts(pageSize,
+		func() ([]*es.PostES, error) {
+			return s.postESRepo.HybridSearch(ctx, keyword, vector, from, pageSize+1)
+		},
+		s.batchToPostDTOByES,
+	)
 }
 
 // CreatePost 创建帖子
@@ -59,18 +103,22 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 	}
 
 	post.UserID = userID
-	post.ID = 0
 
 	return s.postDBRepo.CreatePost(ctx, post)
 }
 
 // GetPostById 获取单个帖子
-func (s *postServiceImpl) GetPostById(ctx context.Context, id uint64) (*dto.PostDTO, error) {
-	post, err := s.postDBRepo.GetPost(ctx, id)
+func (s *postServiceImpl) GetPostById(ctx context.Context, userID uint64, PostID uint64) (*dto.PostDTO, error) {
+	post, err := s.postESRepo.GetPostById(ctx, PostID)
 	if err != nil {
 		return nil, err
 	}
-	return s.toPostDTO(post)
+
+	go func(uid uint64, tags []string) {
+		s.RecordInterest(context.Background(), uid, tags, 1)
+	}(userID, post.AITags)
+
+	return s.toPostDTOByES(post)
 }
 
 // GetPostByIds 批量获取帖子
@@ -82,22 +130,34 @@ func (s *postServiceImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*dt
 	return s.batchToPostDTO(posts)
 }
 
-// GetPostByUserId 获取指定用户的公开帖子列表
-func (s *postServiceImpl) GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error) {
-	posts, err := s.postDBRepo.GetPostByUserId(ctx, userId, pageSize, (page-1)*pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return s.batchToPostDTO(posts)
+func (s *postServiceImpl) GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	return getWaterfallPosts(pageSize,
+		func() ([]*model.Post, error) {
+			return s.postDBRepo.GetPostByUserId(ctx, userId, pageSize+1, (page-1)*pageSize)
+		},
+		s.batchToPostDTO,
+	)
 }
 
-// GetPostSelf 获取登录用户自己的帖子列表，含非公开状态
-func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) ([]*dto.PostDTO, error) {
-	posts, err := s.postDBRepo.GetPostSelf(ctx, userId, pageSize, (page-1)*pageSize)
-	if err != nil {
-		return nil, err
-	}
-	return s.batchToPostDTO(posts)
+// GetPostSelf 获取登录用户自己的帖子列表
+func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	return getWaterfallPosts(pageSize,
+		func() ([]*model.Post, error) {
+			return s.postDBRepo.GetPostSelf(ctx, userId, pageSize+1, (page-1)*pageSize)
+		},
+		func(posts []*model.Post) ([]*dto.PostDTO, error) {
+			out := make([]*dto.PostDTO, len(posts))
+			for i, post := range posts {
+				item, err := s.toPostDTO(post)
+				if err != nil {
+					return nil, err
+				}
+				item.Status = &post.Status
+				out[i] = item
+			}
+			return out, nil
+		},
+	)
 }
 
 // UpdatePostContent 更新帖子内容及媒体
@@ -110,18 +170,14 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		return UnauthorizedError
 	}
 
-	post := &model.Post{}
-	if err = copier.Copy(post, postDTO); err != nil {
+	if err = copier.Copy(oldPost, postDTO); err != nil {
 		return err
 	}
-	if err = copier.Copy(&post.MediaList, &postDTO.Medias); err != nil {
+	if err = copier.Copy(&oldPost.MediaList, &postDTO.Medias); err != nil {
 		return err
 	}
 
-	post.ID = postID
-	post.UserID = userID
-
-	return s.postDBRepo.UpdatePostContent(ctx, post)
+	return s.postDBRepo.UpdatePostContent(ctx, oldPost)
 }
 
 // DeletePost 删除帖子
@@ -135,6 +191,32 @@ func (s *postServiceImpl) DeletePost(ctx context.Context, userID uint64, postID 
 		return UnauthorizedError
 	}
 	return s.postDBRepo.DeletePost(ctx, postID)
+}
+
+func (s *postServiceImpl) RecordInterest(ctx context.Context, userID uint64, aiTags []string, actionType int) {
+	if len(aiTags) == 0 {
+		return
+	}
+
+	var tagsToAdd []string
+	if actionType == 1 {
+		limit := 2
+		if len(aiTags) < 2 {
+			limit = len(aiTags)
+		}
+		tagsToAdd = aiTags[:limit]
+	} else {
+		tagsToAdd = aiTags
+	}
+
+	now := time.Now().Unix()
+	key := consts.UserInterestKey + strconv.FormatUint(userID, 10)
+
+	for _, tag := range tagsToAdd {
+		_ = redis.ZAdd(ctx, key, float64(now), tag)
+	}
+
+	_ = redis.ZRemRangeByRank(ctx, key, 0, -101)
 }
 
 // toPostDTO 将 Model 转换为返回给前端的 DTO
@@ -169,6 +251,10 @@ func (s *postServiceImpl) toPostDTOByES(post *es.PostES) (*dto.PostDTO, error) {
 	if err := copier.Copy(out, post); err != nil {
 		return nil, err
 	}
+	out.Nickname = post.UserNickname
+	out.AvatarURL = minio.GetPublicURL(post.UserAvatar)
+	out.CreatedAt = post.CreatedAt.Format("2006-01-02 15:04:05")
+	out.UpdatedAt = post.UpdatedAt.Format("2006-01-02 15:04:05")
 	var mediaBaseDTO []*dto.MediasBaseDTO
 	for _, media := range post.Media {
 		mediaBaseDTO = append(mediaBaseDTO, &dto.MediasBaseDTO{
@@ -208,4 +294,31 @@ func (s *postServiceImpl) batchToPostDTOByES(posts []*es.PostES) ([]*dto.PostDTO
 		out[i] = item
 	}
 	return out, nil
+}
+
+func getWaterfallPosts[T any](
+	pageSize int,
+	fetchFunc func() ([]T, error),
+	convertFunc func([]T) ([]*dto.PostDTO, error),
+) (*dto.PostWaterfallDTO, error) {
+	rawData, err := fetchFunc()
+	if err != nil {
+		return nil, err
+	}
+
+	hasMore := false
+	if len(rawData) > pageSize {
+		hasMore = true
+		rawData = rawData[:pageSize]
+	}
+
+	dtoItems, err := convertFunc(rawData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.PostWaterfallDTO{
+		List:    dtoItems,
+		HasMore: hasMore,
+	}, nil
 }

@@ -8,6 +8,7 @@ import (
 	log "log/slog"
 	"strconv"
 
+	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/conflicts"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/sortorder"
@@ -19,6 +20,7 @@ type PostRepo interface {
 	HybridSearch(ctx context.Context, queryText string, queryVector []float32, from, size int) ([]*PostES, error)
 	GetPostById(ctx context.Context, id uint64) (*PostES, error)
 	GetPostByMainTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error)
+	GetLatestPosts(ctx context.Context, from, size int) ([]*PostES, error)
 	IndexPost(ctx context.Context, post *PostES, version int64) error
 	DeletePost(ctx context.Context, id uint64) error
 	UpdatePostUserDetail(ctx context.Context, userID uint64, newNickname string, newAvatar string) error
@@ -40,6 +42,7 @@ func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, query
 			QueryVector:   queryVector,
 			K:             util.PtrInt(10),
 			NumCandidates: util.PtrInt(100),
+			Similarity:    util.PtrFloat32(0.6),
 		}).
 		// 配置传统文本搜索（增强精准度）
 		Query(&types.Query{
@@ -54,22 +57,7 @@ func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, query
 		From(from).
 		Size(size)
 
-	resp, err := searchReq.Do(ctx)
-	if err != nil {
-		log.Error("Post Index: Search failed", "query_text", queryText, "query_vector", queryVector, "from", from, "size", size)
-		return nil, err
-	}
-
-	results := make([]*PostES, 0, len(resp.Hits.Hits))
-	for _, hit := range resp.Hits.Hits {
-		var post PostES
-		if err = json.Unmarshal(hit.Source_, &post); err != nil {
-			continue
-		}
-		results = append(results, &post)
-	}
-
-	return results, nil
+	return s.executeSearch(ctx, searchReq)
 }
 
 func (s *PostRepoImpl) GetPostById(ctx context.Context, id uint64) (*PostES, error) {
@@ -125,22 +113,22 @@ func (s *PostRepoImpl) GetPostByMainTag(ctx context.Context, tag string, isMain 
 		From(from).
 		Size(size)
 
-	resp, err := searchReq.Do(ctx)
-	if err != nil {
-		log.Error("Post Index: Search failed", "tag", tag, "is_main", isMain, "from", from, "size", size)
-		return nil, err
-	}
+	return s.executeSearch(ctx, searchReq)
+}
 
-	results := make([]*PostES, 0, len(resp.Hits.Hits))
-	for _, hit := range resp.Hits.Hits {
-		var post PostES
-		if err = json.Unmarshal(hit.Source_, &post); err != nil {
-			continue
-		}
-		results = append(results, &post)
-	}
+// GetLatestPosts 降级逻辑：获取最新的帖子列表
+func (s *PostRepoImpl) GetLatestPosts(ctx context.Context, from, size int) ([]*PostES, error) {
+	searchReq := Client.Search().
+		Index(PostIndex).
+		Query(&types.Query{MatchAll: &types.MatchAllQuery{}}).
+		Sort(types.SortOptions{SortOptions: map[string]types.FieldSort{
+			"created_at": {Order: &sortorder.Desc},
+		}}).
+		Source_(&types.SourceFilter{Excludes: []string{"content_vector"}}).
+		From(from).
+		Size(size)
 
-	return results, nil
+	return s.executeSearch(ctx, searchReq)
 }
 
 func (s *PostRepoImpl) IndexPost(ctx context.Context, post *PostES, version int64) error {
@@ -226,4 +214,21 @@ func (s *PostRepoImpl) UpdatePostUserDetail(ctx context.Context, userID uint64, 
 
 	log.Info("Post Index: Update User Detail Success", "count", resp.Total)
 	return nil
+}
+
+func (s *PostRepoImpl) executeSearch(ctx context.Context, req *search.Search) ([]*PostES, error) {
+	resp, err := req.Do(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	results := make([]*PostES, 0, len(resp.Hits.Hits))
+	for _, hit := range resp.Hits.Hits {
+		var post PostES
+		if err = json.Unmarshal(hit.Source_, &post); err != nil {
+			continue
+		}
+		results = append(results, &post)
+	}
+	return results, nil
 }

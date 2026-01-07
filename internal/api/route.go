@@ -91,6 +91,26 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				userMetricsGroup.GET("/30d", group.UserMetricHandler.GetMetrics30Days)
 			}
 		}
+
+		postGroup := apiGroup.Group("/post")
+		{
+			authOptGroup := postGroup.Group("")
+			authOptGroup.Use(middleware.AuthOptionalMiddleware())
+			{
+				authOptGroup.GET("/recommend", group.PostHandler.RecommendPost)
+				authOptGroup.GET("/search", group.PostHandler.SearchPost)
+				authOptGroup.GET("/detail/:post_id", group.PostHandler.GetPost)
+			}
+
+			authGroup := postGroup.Group("")
+			authGroup.Use(middleware.AuthMiddleware())
+			{
+				authGroup.POST("", group.PostHandler.CreatePost)
+				authGroup.PUT("/:post_id", group.PostHandler.UpdatePostContent)
+				authGroup.DELETE("/:post_id", group.PostHandler.DeletePost)
+				authGroup.GET("/self", group.PostHandler.GetPostSelf)
+			}
+		}
 	}
 
 	return r

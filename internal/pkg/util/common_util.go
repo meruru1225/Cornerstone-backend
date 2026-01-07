@@ -38,6 +38,11 @@ func PtrInt(i int) *int {
 	return &i
 }
 
+// PtrFloat32 用于将 float32 转换为 *float32
+func PtrFloat32(f float32) *float32 {
+	return &f
+}
+
 // StrSliceToUInt64Slice 将字符串切片转换为整数切片
 func StrSliceToUInt64Slice(strSlice []string) ([]uint64, error) {
 	intSlice := make([]uint64, len(strSlice))

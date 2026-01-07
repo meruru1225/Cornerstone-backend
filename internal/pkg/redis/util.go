@@ -85,6 +85,25 @@ func GetSet(ctx context.Context, key string) ([]string, error) {
 	return value, nil
 }
 
+// ZAdd 向有序集合添加一个或多个成员，或者更新已存在成员的分数
+func ZAdd(ctx context.Context, key string, score float64, member string) error {
+	return Rdb.ZAdd(ctx, key, redis.Z{Score: score, Member: member}).Err()
+}
+
+// ZRevRange 获取有序集合中指定区间内的成员，分数从高到低排序
+func ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, error) {
+	value, err := Rdb.ZRevRange(ctx, key, start, stop).Result()
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// ZRemRangeByRank 移除有序集合中给定的排名区间的所有成员
+func ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error {
+	return Rdb.ZRemRangeByRank(ctx, key, start, stop).Err()
+}
+
 func Rename(ctx context.Context, oldKey string, newKey string) error {
 	return Rdb.Rename(ctx, oldKey, newKey).Err()
 }

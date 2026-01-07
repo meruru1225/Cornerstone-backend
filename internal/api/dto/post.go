@@ -6,6 +6,7 @@ type PostDTO struct {
 	ID        uint64 `json:"id"`
 	Title     string `json:"title"`
 	Content   string `json:"content"`
+	Status    *int8  `json:"status,omitempty"`
 	CreatedAt string `json:"created_at"`
 	UpdatedAt string `json:"updated_at"`
 
@@ -18,9 +19,14 @@ type PostDTO struct {
 	AvatarURL string `json:"avatar_url"`
 }
 
+// PostWaterfallDTO 帖子瀑布流
+type PostWaterfallDTO struct {
+	List    []*PostDTO `json:"list"`
+	HasMore bool       `json:"has_more"`
+}
+
 // PostBaseDTO 帖子 - 新增或修改
 type PostBaseDTO struct {
-	ID      uint64           `json:"id"`
 	Title   string           `json:"title" binding:"required" validate:"min=1,max=255"`
 	Content string           `json:"content" binding:"required" validate:"min=1,max=1000"`
 	Medias  []*MediasBaseDTO `json:"Medias" validate:"max=9"`
@@ -34,4 +40,14 @@ type MediasBaseDTO struct {
 	Height   int     `json:"height" binding:"required" validate:"min=1"`
 	Duration int     `json:"duration"`
 	CoverURL *string `json:"cover_url,omitempty"`
+}
+
+type PostListDTO struct {
+	Keyword  string `form:"keyword"`
+	Page     int    `form:"page,default=1"`
+	PageSize int    `form:"page_size,default=20"`
+}
+
+type PostDeleteDTO struct {
+	ID uint64 `json:"id" binding:"required"`
 }

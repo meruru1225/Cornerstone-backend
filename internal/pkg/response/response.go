@@ -6,6 +6,7 @@ import (
 	"errors"
 	log "log/slog"
 	"net/http"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-playground/validator/v10"
@@ -50,6 +51,11 @@ func Error(c *gin.Context, err error) {
 	var unmarshalTypeError *json.UnmarshalTypeError
 	if errors.As(err, &unmarshalTypeError) {
 		Fail(c, BadRequest, "Json错误")
+		return
+	}
+
+	if strings.Contains(err.Error(), "strconv") || strings.Contains(err.Error(), "parsing") {
+		Fail(c, BadRequest, "查询参数类型错误")
 		return
 	}
 
