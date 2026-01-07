@@ -7,5 +7,6 @@ type HandlersGroup struct {
 	AgentHandler      *handler.AgentHandler
 	UserHandler       *handler.UserHandler
 	UserFollowHandler *handler.UserFollowHandler
+	UserMetricHandler *handler.UserMetricsHandler
 	PostHandler       *handler.PostHandler
 }

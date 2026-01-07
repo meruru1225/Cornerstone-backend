@@ -8,20 +8,20 @@ import (
 )
 
 type Manager struct {
-	engine          *cron.Cron
-	userInterestJob *job.UserInterestJob
+	engine        *cron.Cron
+	userMetricJob *job.UserMetricsJob
 }
 
-func NewCronManager(userInterestJob *job.UserInterestJob) *Manager {
+func NewCronManager(userInterestJob *job.UserMetricsJob) *Manager {
 	return &Manager{
-		engine:          cron.New(cron.WithSeconds()),
-		userInterestJob: userInterestJob,
+		engine:        cron.New(cron.WithSeconds()),
+		userMetricJob: userInterestJob,
 	}
 }
 
 // RegisterJobs 注册定时任务
 func (s *Manager) RegisterJobs() error {
-	if _, err := s.engine.AddJob("@daily", s.userInterestJob); err != nil {
+	if _, err := s.engine.AddJob("@daily", s.userMetricJob); err != nil {
 		return err
 	}
 	return nil

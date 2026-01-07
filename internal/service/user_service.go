@@ -30,6 +30,7 @@ type UserService interface {
 	UpdatePasswordFromOld(ctx context.Context, id uint64, dto *dto.ChangePasswordDTO) error
 	UpdatePhone(ctx context.Context, id uint64, dto *dto.ChangePhoneDTO) error
 	UpdateUsername(ctx context.Context, id uint64, dto *dto.ChangeUsernameDTO) error
+	UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error
 	UpdateAvatar(ctx context.Context, id uint64, objectName string) error
 	BanUser(ctx context.Context, id uint64) error
 	UnBanUser(ctx context.Context, id uint64) error
@@ -292,12 +293,9 @@ func (s *UserServiceImpl) UpdateUserInfo(ctx context.Context, id uint64, dto *dt
 		return err
 	}
 	lockKey := consts.UserDetailLock + strconv.FormatUint(id, 10)
-	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Second*5, 3)
+	err = s.getUserDetailLock(ctx, lockKey, newUUID.String())
 	if err != nil {
 		return err
-	}
-	if !lock {
-		return UnExpectedError
 	}
 	defer redis.UnLock(ctx, lockKey, newUUID.String())
 
@@ -411,6 +409,21 @@ func (s *UserServiceImpl) UpdateUsername(ctx context.Context, id uint64, dto *dt
 	return s.userRepo.UpdateUser(ctx, user)
 }
 
+func (s *UserServiceImpl) UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error {
+	newUUID, err := uuid.NewUUID()
+	if err != nil {
+		return err
+	}
+	lockKey := consts.UserDetailLock + strconv.FormatUint(id, 10)
+	err = s.getUserDetailLock(ctx, lockKey, newUUID.String())
+	if err != nil {
+		return err
+	}
+	defer redis.UnLock(ctx, lockKey, newUUID.String())
+
+	return s.userRepo.UpdateUserFollowCount(ctx, id, followerCount, followingCount)
+}
+
 func (s *UserServiceImpl) UpdateAvatar(ctx context.Context, id uint64, objectName string) error {
 	user, err := s.userRepo.GetUserById(ctx, id)
 	if err != nil {
@@ -506,4 +519,15 @@ func (s *UserServiceImpl) changeUserIsBanStatus(ctx context.Context, id uint64, 
 	}
 	user.IsBan = isBan
 	return s.userRepo.UpdateUser(ctx, user)
+}
+
+func (s *UserServiceImpl) getUserDetailLock(ctx context.Context, lockKey string, value string) error {
+	lock, err := redis.TryLock(ctx, lockKey, value, time.Second*5, 3)
+	if err != nil {
+		return err
+	}
+	if !lock {
+		return UnExpectedError
+	}
+	return nil
 }

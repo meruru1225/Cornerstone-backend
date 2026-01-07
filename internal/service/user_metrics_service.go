@@ -1,6 +1,7 @@
 package service
 
 import (
+	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/redis"
@@ -10,15 +11,12 @@ import (
 	"time"
 
 	"github.com/goccy/go-json"
-	"github.com/google/uuid"
 )
 
 type UserMetricsService interface {
-	CreateUserMetricByYesterday(ctx context.Context, userID uint64) error
-	AddCountUserMetrics(ctx context.Context, userID uint64, count int) error
-	GetUserMetricsByDate(ctx context.Context, userID uint64, date time.Time) (*model.UserMetrics, error)
-	GetUserMetricsBy7Days(ctx context.Context, userID uint64) ([]*model.UserMetrics, error)
-	GetUserMetricsBy30Days(ctx context.Context, userID uint64) ([]*model.UserMetrics, error)
+	SyncUserDailyMetric(ctx context.Context, userID uint64) error
+	GetUserMetricsBy7Days(ctx context.Context, userID uint64) ([]*dto.UserMetricDTO, error)
+	GetUserMetricsBy30Days(ctx context.Context, userID uint64) ([]*dto.UserMetricDTO, error)
 }
 
 type userMetricsServiceImpl struct {
@@ -32,119 +30,52 @@ func NewUserMetricsService(userMetricsRepo repository.UserMetricsRepo, userFollo
 		userFollowRepo:  userFollowRepo,
 	}
 }
+func (s *userMetricsServiceImpl) SyncUserDailyMetric(ctx context.Context, userID uint64) error {
+	followerCount, err := s.userFollowRepo.GetUserFollowerCount(ctx, userID)
+	if err != nil {
+		return err
+	}
 
-func (s *userMetricsServiceImpl) CreateUserMetricByYesterday(ctx context.Context, userID uint64) error {
-	lockKey := consts.UserMetricDailyLock + strconv.FormatUint(userID, 10)
-	newUUID, err := uuid.NewUUID()
-	if err != nil {
-		return err
+	today := getMidnight(time.Now())
+	metric := &model.UserMetrics{
+		UserID:         userID,
+		TotalFollowers: int(followerCount),
+		MetricDate:     today,
 	}
-	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Minute*5, 3)
-	if err != nil {
-		return err
-	}
-	if !lock {
-		return UnExpectedError
-	}
-	defer redis.UnLock(ctx, lockKey, newUUID.String())
-	yesterday := getMidnight(time.Now()).AddDate(0, 0, -1)
-	metric, err := s.userMetricsRepo.GetUserMetricsByDate(ctx, userID, yesterday)
-	if err != nil {
-		return err
-	}
-	if metric == nil {
-		followerCount, err := s.userFollowRepo.GetUserFollowerCount(ctx, userID)
-		if err != nil {
-			return err
-		}
-		metric = &model.UserMetrics{
-			UserID:         userID,
-			TotalFollowers: int(followerCount),
-		}
-	}
-	metric.ID = 0
-	metric.MetricDate = getMidnight(time.Now())
-	return s.userMetricsRepo.CreateUserMetric(ctx, metric)
+
+	return s.userMetricsRepo.SaveOrUpdateMetric(ctx, metric)
 }
 
-func (s *userMetricsServiceImpl) AddCountUserMetrics(ctx context.Context, userID uint64, count int) error {
-	lockKey := consts.UserMetricDailyLock + strconv.FormatUint(userID, 10)
-	newUUID, err := uuid.NewUUID()
-	if err != nil {
-		return err
-	}
-	lock, err := redis.TryLock(ctx, lockKey, newUUID.String(), time.Minute*5, 3)
-	if err != nil {
-		return UnExpectedError
-	}
-	if !lock {
-		return nil
-	}
-	defer redis.UnLock(ctx, lockKey, newUUID.String())
-	now := getMidnight(time.Now())
-	metric, err := s.userMetricsRepo.GetUserMetricsByDate(ctx, userID, now)
-	if err != nil {
-		return err
-	}
-	if metric == nil {
-		yesterday := getMidnight(time.Now()).AddDate(0, 0, -1)
-		metric, err = s.userMetricsRepo.GetUserMetricsByDate(ctx, userID, yesterday)
-		if err != nil {
-			return err
-		}
-		if metric == nil {
-			followerCount, err := s.userFollowRepo.GetUserFollowerCount(ctx, userID)
-			if err != nil {
-				return err
-			}
-			metric = &model.UserMetrics{
-				UserID:         userID,
-				MetricDate:     now,
-				TotalFollowers: int(followerCount),
-			}
-		} else {
-			metric.ID = 0
-			metric.MetricDate = getMidnight(time.Now())
-			metric.TotalFollowers += count
-		}
-		return s.userMetricsRepo.CreateUserMetric(ctx, metric)
-	}
-	metric.TotalFollowers += count
-	return s.userMetricsRepo.UpdateUserMetric(ctx, metric)
-}
-
-func (s *userMetricsServiceImpl) GetUserMetricsByDate(ctx context.Context, userID uint64, date time.Time) (*model.UserMetrics, error) {
-	return s.userMetricsRepo.GetUserMetricsByDate(ctx, userID, date)
-}
-
-func (s *userMetricsServiceImpl) GetUserMetricsBy7Days(ctx context.Context, userID uint64) ([]*model.UserMetrics, error) {
+func (s *userMetricsServiceImpl) GetUserMetricsBy7Days(ctx context.Context, userID uint64) ([]*dto.UserMetricDTO, error) {
 	key := consts.UserMetrics7DaysKey + strconv.FormatUint(userID, 10)
-	return s.getUserMetricsByDays(ctx, key, func() ([]*model.UserMetrics, error) {
+	return s.getUserMetricsByDays(ctx, userID, key, 7, func() ([]*model.UserMetrics, error) {
 		return s.userMetricsRepo.GetUserMetricsBy7Days(ctx, userID)
 	})
 }
 
-func (s *userMetricsServiceImpl) GetUserMetricsBy30Days(ctx context.Context, userID uint64) ([]*model.UserMetrics, error) {
+func (s *userMetricsServiceImpl) GetUserMetricsBy30Days(ctx context.Context, userID uint64) ([]*dto.UserMetricDTO, error) {
 	key := consts.UserMetrics30DaysKey + strconv.FormatUint(userID, 10)
-	return s.getUserMetricsByDays(ctx, key, func() ([]*model.UserMetrics, error) {
+	return s.getUserMetricsByDays(ctx, userID, key, 30, func() ([]*model.UserMetrics, error) {
 		return s.userMetricsRepo.GetUserMetricsBy30Days(ctx, userID)
 	})
 }
 
 func (s *userMetricsServiceImpl) getUserMetricsByDays(
 	ctx context.Context,
+	userID uint64,
 	key string,
+	days int,
 	fetchFromDB func() ([]*model.UserMetrics, error),
-) ([]*model.UserMetrics, error) {
+) ([]*dto.UserMetricDTO, error) {
 	list, err := redis.GetList(ctx, key)
 	if err != nil {
 		return nil, err
 	}
 
 	if len(list) != 0 {
-		metrics := make([]*model.UserMetrics, 0, len(list))
+		metrics := make([]*dto.UserMetricDTO, 0, len(list))
 		for _, v := range list {
-			var metric *model.UserMetrics
+			var metric *dto.UserMetricDTO
 			if err := json.Unmarshal([]byte(v), &metric); err != nil {
 				return nil, err
 			}
@@ -153,16 +84,27 @@ func (s *userMetricsServiceImpl) getUserMetricsByDays(
 		return metrics, nil
 	}
 
-	metrics, err := fetchFromDB()
+	rawData, err := fetchFromDB()
 	if err != nil {
 		return nil, err
 	}
 
-	s.cacheMetrics(ctx, key, metrics)
-	return metrics, nil
+	startTime := getMidnight(time.Now()).AddDate(0, 0, -days)
+
+	var baseline *model.UserMetrics
+	if len(rawData) == 0 || !rawData[0].MetricDate.Equal(startTime) {
+		baseline, _ = s.userMetricsRepo.GetLatestMetricBefore(ctx, userID, startTime)
+	} else {
+		baseline = rawData[0]
+	}
+
+	finalMetrics := s.fillMetricsGaps(rawData, days, baseline)
+
+	s.cacheMetrics(ctx, key, finalMetrics)
+	return finalMetrics, nil
 }
 
-func (s *userMetricsServiceImpl) cacheMetrics(ctx context.Context, key string, metrics []*model.UserMetrics) {
+func (s *userMetricsServiceImpl) cacheMetrics(ctx context.Context, key string, metrics []*dto.UserMetricDTO) {
 	metricJsons := make([]string, 0, len(metrics))
 	for _, v := range metrics {
 		metricJson, err := json.Marshal(v)
@@ -181,6 +123,37 @@ func (s *userMetricsServiceImpl) cacheMetrics(ctx context.Context, key string, m
 	}
 
 	_ = redis.SetListWithExpiration(ctx, key, metricJsons, expiration)
+}
+
+func (s *userMetricsServiceImpl) fillMetricsGaps(rawData []*model.UserMetrics, days int, baseline *model.UserMetrics) []*dto.UserMetricDTO {
+	dataMap := make(map[string]*model.UserMetrics)
+	for _, m := range rawData {
+		dataMap[m.MetricDate.Format(time.DateOnly)] = m
+	}
+
+	finalDTOs := make([]*dto.UserMetricDTO, 0, days)
+	now := time.Now()
+	var lastValid = baseline
+
+	for i := days - 1; i >= 0; i-- {
+		currentDate := getMidnight(now.AddDate(0, 0, -i))
+		dateStr := currentDate.Format(time.DateOnly)
+
+		count := 0
+		if val, ok := dataMap[dateStr]; ok {
+			count = val.TotalFollowers
+			lastValid = val
+		} else if lastValid != nil {
+			count = lastValid.TotalFollowers
+		}
+
+		finalDTOs = append(finalDTOs, &dto.UserMetricDTO{
+			Date:  dateStr,
+			Value: count,
+		})
+	}
+
+	return finalDTOs
 }
 
 func getMidnight(t time.Time) time.Time {

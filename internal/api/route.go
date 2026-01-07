@@ -39,7 +39,6 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			userGroup.POST("/loginByPhone", group.UserHandler.LoginByPhone)
 			userGroup.POST("/register", group.UserHandler.Register)
 			userGroup.GET("/sendSmsCode", group.UserHandler.SendSmsCode)
-			userGroup.POST("/cancelUser", group.UserHandler.CancelUser)
 			userGroup.PUT("/forgetPassword", group.UserHandler.ForgetPassword)
 			userGroup.GET("/homeInfo", group.UserHandler.GetHomeInfo)
 			userGroup.GET("/simpleInfo", group.UserHandler.GetUserSimpleInfoById)
@@ -55,6 +54,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.PUT("/username", group.UserHandler.ChangeUsername)
 				authGroup.PUT("/phone", group.UserHandler.ChangePhone)
 				authGroup.POST("/avatar", group.UserHandler.UploadAvatar)
+				userGroup.POST("/cancelUser", group.UserHandler.CancelUser)
 			}
 
 			// 需要登录 & 拥有 admin 角色
@@ -80,6 +80,15 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				userFollowGroup.GET("/isFollow", group.UserFollowHandler.GetSomeoneIsFollowing)
 				userFollowGroup.POST("/followUser", group.UserFollowHandler.Follow)
 				userFollowGroup.DELETE("/followUser", group.UserFollowHandler.Unfollow)
+			}
+		}
+
+		userMetricsGroup := apiGroup.Group("/user-metrics")
+		{
+			userMetricsGroup.Use(middleware.AuthMiddleware())
+			{
+				userMetricsGroup.GET("/7d", group.UserMetricHandler.GetMetrics7Days)
+				userMetricsGroup.GET("/30d", group.UserMetricHandler.GetMetrics30Days)
 			}
 		}
 	}

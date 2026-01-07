@@ -20,6 +20,7 @@ type UserRepo interface {
 	CreateUser(ctx context.Context, user *model.User, detail *model.UserDetail, roles *[]*model.UserRole) error
 	UpdateUser(ctx context.Context, user *model.User) error
 	UpdateUserDetail(ctx context.Context, detail *model.UserDetail) error
+	UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error
 	DeleteUser(ctx context.Context, id uint64) error
 }
 
@@ -158,6 +159,17 @@ func (s *UserRepoImpl) UpdateUser(ctx context.Context, user *model.User) error {
 
 func (s *UserRepoImpl) UpdateUserDetail(ctx context.Context, detail *model.UserDetail) error {
 	result := s.db.WithContext(ctx).Model(&model.UserDetail{}).Where("user_id = ?", detail.UserID).Updates(detail)
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
+}
+
+func (s *UserRepoImpl) UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error {
+	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(map[string]interface{}{
+		"follower_count":  gorm.Expr("follower_count = ?", followerCount),
+		"following_count": gorm.Expr("following_count = ?", followingCount),
+	})
 	if result.Error != nil {
 		return result.Error
 	}

@@ -8,6 +8,9 @@ type UserDetail struct {
 	Gender    *uint8  `gorm:"type:tinyint;default:0"`
 	Region    *string `gorm:"type:varchar(255)"`
 	Birthday  *string `gorm:"type:date"`
+
+	FollowersCount int64 `gorm:"type:int;default:0"`
+	FollowingCount int64 `gorm:"type:int;default:0"`
 }
 
 func (UserDetail) TableName() string {

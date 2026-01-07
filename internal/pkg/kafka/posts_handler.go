@@ -7,6 +7,7 @@ import (
 	"Cornerstone/internal/pkg/llm"
 	"Cornerstone/internal/pkg/processor"
 	"Cornerstone/internal/pkg/redis"
+	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/repository"
 	"context"
 	"fmt"
@@ -88,6 +89,9 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		}
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
+
+	tags := util.ExtractTags(post.Content)
+	post.UserTags = tags
 
 	// LLM 处理文本和媒体
 	mediaForLLM := make([]*es.PostMediaES, len(post.Media))

@@ -76,6 +76,19 @@ func GetList(ctx context.Context, key string) ([]string, error) {
 	return value, nil
 }
 
+// GetSet 获取集合
+func GetSet(ctx context.Context, key string) ([]string, error) {
+	value, err := Rdb.SMembers(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+func Rename(ctx context.Context, oldKey string, newKey string) error {
+	return Rdb.Rename(ctx, oldKey, newKey).Err()
+}
+
 // DeleteKey 删除一个键
 func DeleteKey(ctx context.Context, key string) error {
 	return Rdb.Del(ctx, key).Err()

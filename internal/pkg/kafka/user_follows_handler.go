@@ -40,8 +40,6 @@ func (s *UserFollowsHandler) ConsumeClaim(session sarama.ConsumerGroupSession, c
 	return nil
 }
 
-// TODO 此处原本的metric逻辑已删除，需要用定时任务补充，现有逻辑为Redis计数
-
 func (s *UserFollowsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) error {
 	canalMsg, err := ToCanalMessage(msg, "user_follows")
 	if err != nil || canalMsg == nil {

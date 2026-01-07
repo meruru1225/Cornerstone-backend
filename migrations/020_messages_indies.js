@@ -1,11 +1,11 @@
 db.messages.createIndex(
-    { conversation_id: 1, created_at: -1 }, // 1: 升序, -1: 降序
-    { name: "idx_conv_time", background: true }
+    { conversation_id: 1, seq: -1 },
+    { name: "idx_conv_seq", background: true }
 );
 
 db.messages.createIndex(
     { sender_id: 1 },
-    { name: "idx_sender_id" }
+    { name: "idx_sender" }
 );
 
 db.runCommand({
@@ -13,14 +13,19 @@ db.runCommand({
     validator: {
         $jsonSchema: {
             bsonType: "object",
-            required: ["conversation_id", "sender_id", "content", "media_type", "created_at"],
+            required: ["conversation_id", "sender_id", "content", "media_type", "seq", "created_at"],
             properties: {
-                conversation_id: { bsonType: "long" },
-                sender_id: { bsonType: "long" },
-                media_type: { enum: [0, 1, 2, 3] },
+                conversation_id: { bsonType: "long", description: "关联MySQL的会话ID" },
+                sender_id: { bsonType: "long", description: "发送者用户ID" },
+                content: { bsonType: "string", description: "消息内容" },
+                media_type: {
+                    bsonType: "string",
+                    description: "消息媒体类型: text, image, video, audio, file"
+                },
+                seq: { bsonType: "long", description: "该消息在会话中的唯一有序序号" },
                 created_at: { bsonType: "date" }
             }
         }
     },
-    validationAction: "warn" // 发现校验不通过时，只发出警告，不阻止写入 (方便初期开发)
+    validationAction: "warn"
 });

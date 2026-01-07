@@ -30,6 +30,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userRepo := repository.NewUserRepo(db)
 	userRolesRepo := repository.NewUserRolesRepo(db)
 	userFollowRepo := repository.NewUserFollowRepo(db)
+	userMetricsRepo := repository.NewUserMetricsRepository(db)
 	roleRepo := repository.NewRoleRepo(db)
 	postRepo := repository.NewPostRepo(db)
 
@@ -48,6 +49,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userService := service.NewUserService(userRepo, roleRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
+	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
 	smsService := service.NewSmsService()
 	postService := service.NewPostService(postESRepo, postRepo)
 
@@ -55,13 +57,14 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 		AgentHandler:      handler.NewAgentHandler(agent),
 		UserHandler:       handler.NewUserHandler(userService, userRolesService, smsService),
 		UserFollowHandler: handler.NewUserFollowHandler(userFollowService),
+		UserMetricHandler: handler.NewUserMetricsHandler(userMetricsService),
 		PostHandler:       handler.NewPostHandler(postService),
 	}
 
 	router := api.SetupRouter(handlers)
 
 	// Cron 任务
-	interestJob := job.NewUserInterestJob(userRepo)
+	interestJob := job.NewUserMetricsJob(userService, userMetricsService, userFollowService)
 	cronMgr := cron.NewCronManager(interestJob)
 
 	// Kafka 消费者管理
