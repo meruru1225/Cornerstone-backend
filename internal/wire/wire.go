@@ -33,6 +33,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userMetricsRepo := repository.NewUserMetricsRepository(db)
 	roleRepo := repository.NewRoleRepo(db)
 	postRepo := repository.NewPostRepo(db)
+	postActionRepo := repository.NewPostActionRepo(db)
 
 	// ES 实例
 	userESRepo := es.NewUserRepo()
@@ -52,6 +53,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
 	smsService := service.NewSmsService()
 	postService := service.NewPostService(postESRepo, postRepo)
+	postActionService := service.NewPostActionService(postActionRepo, postRepo, userRepo)
 
 	handlers := &api.HandlersGroup{
 		AgentHandler:      handler.NewAgentHandler(agent),
@@ -59,6 +61,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 		UserFollowHandler: handler.NewUserFollowHandler(userFollowService),
 		UserMetricHandler: handler.NewUserMetricsHandler(userMetricsService),
 		PostHandler:       handler.NewPostHandler(postService),
+		PostActionHandler: handler.NewPostActionHandler(postActionService),
 	}
 
 	router := api.SetupRouter(handlers)

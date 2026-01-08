@@ -26,6 +26,9 @@ var (
 	ErrUserFollowLimit         = errors.New("用户关注数量超过限制")
 	ErrUserFollowSelf          = errors.New("用户不能关注自己")
 	ErrUserHasRole             = errors.New("用户已拥有此角色")
+	ErrPostNotFound            = errors.New("帖子不存在")
+	ErrPostCommentNotFound     = errors.New("评论不存在")
+	ErrActionDuplicate         = errors.New("重复操作")
 	UnauthorizedError          = errors.New("权限不足")
 	UnExpectedError            = errors.New("系统异常，请稍后重试")
 )
@@ -45,5 +48,9 @@ var ErrorMap = map[error]int{
 	ErrUserFollowLimit:         BadRequest,
 	ErrUserFollowSelf:          BadRequest,
 	ErrUserHasRole:             BadRequest,
+	ErrPostNotFound:            NotFound,
+	ErrPostCommentNotFound:     NotFound,
+	ErrActionDuplicate:         BadRequest,
+	UnauthorizedError:          Unauthorized,
 	UnExpectedError:            InternalServerError,
 }

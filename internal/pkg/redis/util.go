@@ -85,6 +85,11 @@ func GetSet(ctx context.Context, key string) ([]string, error) {
 	return value, nil
 }
 
+// SAdd 向集合添加成员
+func SAdd(ctx context.Context, key string, member interface{}) error {
+	return Rdb.SAdd(ctx, key, member).Err()
+}
+
 // ZAdd 向有序集合添加一个或多个成员，或者更新已存在成员的分数
 func ZAdd(ctx context.Context, key string, score float64, member string) error {
 	return Rdb.ZAdd(ctx, key, redis.Z{Score: score, Member: member}).Err()
@@ -102,6 +107,28 @@ func ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, er
 // ZRemRangeByRank 移除有序集合中给定的排名区间的所有成员
 func ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error {
 	return Rdb.ZRemRangeByRank(ctx, key, start, stop).Err()
+}
+
+// Incr 自增
+func Incr(ctx context.Context, key string) error {
+	return Rdb.Incr(ctx, key).Err()
+}
+
+// Decr 自减
+func Decr(ctx context.Context, key string) error {
+	return Rdb.Decr(ctx, key).Err()
+}
+
+// GetInt64 获取 int64 类型的值
+func GetInt64(ctx context.Context, key string) (int64, error) {
+	val, err := Rdb.Get(ctx, key).Int64()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return 0, redis.Nil
+		}
+		return 0, err
+	}
+	return val, nil
 }
 
 func Rename(ctx context.Context, oldKey string, newKey string) error {

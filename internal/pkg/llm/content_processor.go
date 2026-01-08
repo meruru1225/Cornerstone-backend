@@ -116,7 +116,7 @@ func GetVector(ctx context.Context, content *Content, tags []string, summary str
 	if content == nil {
 		return nil, errors.New("内容处理-AI大模型返回数据为空")
 	}
-	s := fmt.Sprintf("Title: %s\nContent: %s\nTags: %s\nSummary: %s\n", content.Title, content.Content, strings.Join(tags, ","), summary)
+	s := fmt.Sprintf("Title: %s\nContent: %s\nTags: %s\nSummary: %s\n", *content.Title, content.Content, strings.Join(tags, ","), summary)
 	vector, err := fetchModelEmbedding(ctx, s)
 	if err != nil {
 		log.ErrorContext(ctx, "内容处理-AI大模型向量获取失败", "err", err)

@@ -9,4 +9,5 @@ type HandlersGroup struct {
 	UserFollowHandler *handler.UserFollowHandler
 	UserMetricHandler *handler.UserMetricsHandler
 	PostHandler       *handler.PostHandler
+	PostActionHandler *handler.PostActionHandler
 }
