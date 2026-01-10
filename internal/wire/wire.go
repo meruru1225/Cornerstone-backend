@@ -31,9 +31,11 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userRolesRepo := repository.NewUserRolesRepo(db)
 	userFollowRepo := repository.NewUserFollowRepo(db)
 	userMetricsRepo := repository.NewUserMetricsRepository(db)
+	userContentMetricsRepo := repository.NewUserContentMetricRepository(db)
 	roleRepo := repository.NewRoleRepo(db)
 	postRepo := repository.NewPostRepo(db)
 	postActionRepo := repository.NewPostActionRepo(db)
+	postMetricsRepo := repository.NewPostMetricRepository(db)
 
 	// ES 实例
 	userESRepo := es.NewUserRepo()
@@ -51,24 +53,29 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
 	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
+	userContentMetricsService := service.NewUserContentMetricService(userContentMetricsRepo, postRepo, postActionRepo)
 	smsService := service.NewSmsService()
 	postService := service.NewPostService(postESRepo, postRepo)
 	postActionService := service.NewPostActionService(postActionRepo, postRepo, userRepo)
+	postMetricsService := service.NewPostMetricService(postMetricsRepo, postRepo)
 
 	handlers := &api.HandlersGroup{
-		AgentHandler:      handler.NewAgentHandler(agent),
-		UserHandler:       handler.NewUserHandler(userService, userRolesService, smsService),
-		UserFollowHandler: handler.NewUserFollowHandler(userFollowService),
-		UserMetricHandler: handler.NewUserMetricsHandler(userMetricsService),
-		PostHandler:       handler.NewPostHandler(postService),
-		PostActionHandler: handler.NewPostActionHandler(postActionService),
+		AgentHandler:             handler.NewAgentHandler(agent),
+		UserHandler:              handler.NewUserHandler(userService, userRolesService, smsService),
+		UserFollowHandler:        handler.NewUserFollowHandler(userFollowService),
+		UserMetricHandler:        handler.NewUserMetricsHandler(userMetricsService),
+		PostHandler:              handler.NewPostHandler(postService),
+		PostActionHandler:        handler.NewPostActionHandler(postActionService),
+		PostMetricHandler:        handler.NewPostMetricHandler(postMetricsService),
+		UserContentMetricHandler: handler.NewUserContentMetricHandler(userContentMetricsService),
 	}
 
 	router := api.SetupRouter(handlers)
 
 	// Cron 任务
-	interestJob := job.NewUserMetricsJob(userService, userMetricsService, userFollowService)
-	cronMgr := cron.NewCronManager(interestJob)
+	userMetricsJob := job.NewUserMetricsJob(userService, userMetricsService, userFollowService)
+	postMetricsJob := job.NewPostMetricsJob(postService, postMetricsService, postActionService, userContentMetricsService)
+	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob)
 
 	// Kafka 消费者管理
 	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, userFollowRepo, postRepo)

@@ -10,18 +10,26 @@ import (
 type Manager struct {
 	engine        *cron.Cron
 	userMetricJob *job.UserMetricsJob
+	postMetricJob *job.PostMetricsJob
 }
 
-func NewCronManager(userInterestJob *job.UserMetricsJob) *Manager {
+func NewCronManager(
+	userInterestJob *job.UserMetricsJob,
+	postMetricJob *job.PostMetricsJob,
+) *Manager {
 	return &Manager{
 		engine:        cron.New(cron.WithSeconds()),
 		userMetricJob: userInterestJob,
+		postMetricJob: postMetricJob,
 	}
 }
 
 // RegisterJobs 注册定时任务
 func (s *Manager) RegisterJobs() error {
 	if _, err := s.engine.AddJob("@daily", s.userMetricJob); err != nil {
+		return err
+	}
+	if _, err := s.engine.AddJob("@daily", s.postMetricJob); err != nil {
 		return err
 	}
 	return nil
