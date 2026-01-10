@@ -13,6 +13,7 @@ const (
 	UserMetrics7DaysKey         = "user:metrics:7days:"
 	UserMetrics30DaysKey        = "user:metrics:30days:"
 	UserInterestKey             = "user:interest:"
+	UserInterestDirtyKey        = "user:interest:dirty"
 	PostDirtyKey                = "post:dirty"
 	PostLikeKey                 = "post:like:"
 	PostCollectionKey           = "post:collection:"
@@ -26,5 +27,6 @@ const (
 )
 
 const (
-	UserDetailLock = "user:detail:lock:"
+	UserDetailLock       = "user:detail:lock:"
+	UserInterestInitLock = "lock:interest:init:"
 )

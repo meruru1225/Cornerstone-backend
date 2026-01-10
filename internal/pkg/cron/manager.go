@@ -8,19 +8,23 @@ import (
 )
 
 type Manager struct {
-	engine        *cron.Cron
-	userMetricJob *job.UserMetricsJob
-	postMetricJob *job.PostMetricsJob
+	engine          *cron.Cron
+	userMetricJob   *job.UserMetricsJob
+	postMetricJob   *job.PostMetricsJob
+	userInterestJob *job.UserInterestJob
 }
 
 func NewCronManager(
-	userInterestJob *job.UserMetricsJob,
+	userMetricJob *job.UserMetricsJob,
 	postMetricJob *job.PostMetricsJob,
+	userInterestJob *job.UserInterestJob,
+
 ) *Manager {
 	return &Manager{
-		engine:        cron.New(cron.WithSeconds()),
-		userMetricJob: userInterestJob,
-		postMetricJob: postMetricJob,
+		engine:          cron.New(cron.WithSeconds()),
+		userMetricJob:   userMetricJob,
+		postMetricJob:   postMetricJob,
+		userInterestJob: userInterestJob,
 	}
 }
 
@@ -30,6 +34,9 @@ func (s *Manager) RegisterJobs() error {
 		return err
 	}
 	if _, err := s.engine.AddJob("@daily", s.postMetricJob); err != nil {
+		return err
+	}
+	if _, err := s.engine.AddJob("@every 12h", s.userInterestJob); err != nil {
 		return err
 	}
 	return nil

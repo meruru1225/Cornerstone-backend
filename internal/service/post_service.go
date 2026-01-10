@@ -11,10 +11,12 @@ import (
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
+	"sort"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 )
 
@@ -33,14 +35,16 @@ type PostService interface {
 }
 
 type postServiceImpl struct {
-	postESRepo es.PostRepo
-	postDBRepo repository.PostRepo
+	postESRepo       es.PostRepo
+	postDBRepo       repository.PostRepo
+	userInterestRepo repository.UserInterestRepo
 }
 
-func NewPostService(postESRepo es.PostRepo, postDBRepo repository.PostRepo) PostService {
+func NewPostService(postESRepo es.PostRepo, postDBRepo repository.PostRepo, userInterestRepo repository.UserInterestRepo) PostService {
 	return &postServiceImpl{
-		postESRepo: postESRepo,
-		postDBRepo: postDBRepo,
+		postESRepo:       postESRepo,
+		postDBRepo:       postDBRepo,
+		userInterestRepo: userInterestRepo,
 	}
 }
 
@@ -48,9 +52,50 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page
 	key := consts.UserInterestKey + strconv.FormatUint(userID, 10)
 	from := (page - 1) * pageSize
 
-	tags, err := redis.ZRevRange(ctx, key, 0, 9)
-	if err != nil {
-		log.ErrorContext(ctx, "get user interests from redis error", "err", err, "userID", userID)
+	tags, _ := redis.ZRevRange(ctx, key, 0, 9)
+
+	if len(tags) == 0 && userID > 0 {
+		userIDStr := strconv.FormatUint(userID, 10)
+		lockKey := consts.UserInterestInitLock + userIDStr
+
+		lockUUID := uuid.NewString()
+
+		ok, err := redis.TryLock(ctx, lockKey, lockUUID, 5, 0)
+		if err == nil && ok {
+			defer redis.UnLock(ctx, lockKey, lockUUID)
+
+			tags, _ = redis.ZRevRange(ctx, key, 0, 9)
+
+			if len(tags) == 0 {
+				snapshot, err := s.userInterestRepo.GetUserInterests(ctx, userID)
+				if err == nil && snapshot != nil && len(snapshot.Interests) > 0 {
+					type kv struct {
+						Key   string
+						Value int64
+					}
+					var ss []kv
+					for k, v := range snapshot.Interests {
+						ss = append(ss, kv{k, v})
+					}
+					// 按分数降序排列
+					sort.Slice(ss, func(i, j int) bool {
+						return ss[i].Value > ss[j].Value
+					})
+
+					// 回刷 Redis ZSet
+					for _, item := range ss {
+						_ = redis.ZAdd(ctx, key, float64(item.Value), item.Key)
+					}
+					_ = redis.ZRemRangeByRank(ctx, key, 0, -101)
+					_ = redis.Expire(ctx, key, 24*time.Hour)
+
+					// 填充本次查询需要的 tags
+					for i := 0; i < len(ss) && i < 10; i++ {
+						tags = append(tags, ss[i].Key)
+					}
+				}
+			}
+		}
 	}
 
 	if len(tags) > 0 {
@@ -58,15 +103,15 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page
 
 		vector, err := llm.GetVectorByString(ctx, interestText)
 		if err != nil {
-			return nil, err
+			log.ErrorContext(ctx, "llm get vector error, fallback to latest", "err", err)
+		} else {
+			return getWaterfallPosts(pageSize,
+				func() ([]*es.PostES, error) {
+					return s.postESRepo.HybridSearch(ctx, interestText, vector, from, pageSize+1)
+				},
+				s.batchToPostDTOByES,
+			)
 		}
-
-		return getWaterfallPosts(pageSize,
-			func() ([]*es.PostES, error) {
-				return s.postESRepo.HybridSearch(ctx, interestText, vector, from, pageSize+1)
-			},
-			s.batchToPostDTOByES,
-		)
 	}
 
 	return getWaterfallPosts(pageSize,
@@ -210,7 +255,7 @@ func (s *postServiceImpl) DeletePost(ctx context.Context, userID uint64, postID 
 }
 
 func (s *postServiceImpl) RecordInterest(ctx context.Context, userID uint64, aiTags []string, actionType int) {
-	if len(aiTags) == 0 {
+	if userID == 0 || len(aiTags) == 0 {
 		return
 	}
 
@@ -226,13 +271,38 @@ func (s *postServiceImpl) RecordInterest(ctx context.Context, userID uint64, aiT
 	}
 
 	now := time.Now().Unix()
-	key := consts.UserInterestKey + strconv.FormatUint(userID, 10)
+	userIDStr := strconv.FormatUint(userID, 10)
+	key := consts.UserInterestKey + userIDStr
+	exists, _ := redis.Exists(ctx, key)
+	if !exists {
+		newUUID, err := uuid.NewUUID()
+		if err != nil {
+			return
+		}
+		lockKey := consts.UserInterestInitLock + userIDStr
+		ok, err := redis.TryLock(ctx, lockKey, newUUID.String(), 5, 0)
+		defer redis.UnLock(ctx, lockKey, newUUID.String())
+		if err == nil && ok {
+			if ex, _ := redis.Exists(ctx, key); !ex {
+				snapshot, err := s.userInterestRepo.GetUserInterests(ctx, userID)
+				if err == nil && snapshot != nil && len(snapshot.Interests) > 0 {
+					for tag, score := range snapshot.Interests {
+						_ = redis.ZAdd(ctx, key, float64(score), tag)
+					}
+					_ = redis.Expire(ctx, key, 24*time.Hour)
+				}
+			}
+		}
+	}
 
 	for _, tag := range tagsToAdd {
 		_ = redis.ZAdd(ctx, key, float64(now), tag)
 	}
 
+	_ = redis.Expire(ctx, key, 24*time.Hour)
 	_ = redis.ZRemRangeByRank(ctx, key, 0, -101)
+
+	_ = redis.SAdd(ctx, consts.UserInterestDirtyKey, userID)
 }
 
 // toPostDTO 将 Model 转换为返回给前端的 DTO

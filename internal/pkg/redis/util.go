@@ -105,6 +105,15 @@ func ZRevRange(ctx context.Context, key string, start, stop int64) ([]string, er
 	return value, nil
 }
 
+// ZRevRangeWithScores 获取有序集合中指定区间内的成员和分数，分数从高到低排序
+func ZRevRangeWithScores(ctx context.Context, key string, start, stop int64) ([]redis.Z, error) {
+	value, err := Rdb.ZRevRangeWithScores(ctx, key, start, stop).Result()
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
 // ZRemRangeByRank 移除有序集合中给定的排名区间的所有成员
 func ZRemRangeByRank(ctx context.Context, key string, start, stop int64) error {
 	return Rdb.ZRemRangeByRank(ctx, key, start, stop).Err()
@@ -153,9 +162,20 @@ func SetWithMidnightExpiration(ctx context.Context, key string, data any) error 
 	return SetWithExpiration(ctx, key, string(bs), expiration)
 }
 
+// Exists 判断是否存在
+func Exists(ctx context.Context, key string) (bool, error) {
+	result, err := Rdb.Exists(ctx, key).Result()
+	return result > 0, err
+}
+
 // DeleteKey 删除一个键
 func DeleteKey(ctx context.Context, key string) error {
 	return Rdb.Del(ctx, key).Err()
+}
+
+// Expire 设置过期时间
+func Expire(ctx context.Context, key string, expiration time.Duration) error {
+	return Rdb.Expire(ctx, key, expiration).Err()
 }
 
 // GetRdbClient 获取redis客户端

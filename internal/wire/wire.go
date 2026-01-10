@@ -36,6 +36,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	postRepo := repository.NewPostRepo(db)
 	postActionRepo := repository.NewPostActionRepo(db)
 	postMetricsRepo := repository.NewPostMetricRepository(db)
+	userInterestRepo := repository.NewUserInterestRepository(db)
 
 	// ES 实例
 	userESRepo := es.NewUserRepo()
@@ -55,7 +56,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
 	userContentMetricsService := service.NewUserContentMetricService(userContentMetricsRepo, postRepo, postActionRepo)
 	smsService := service.NewSmsService()
-	postService := service.NewPostService(postESRepo, postRepo)
+	postService := service.NewPostService(postESRepo, postRepo, userInterestRepo)
 	postActionService := service.NewPostActionService(postActionRepo, postRepo, userRepo)
 	postMetricsService := service.NewPostMetricService(postMetricsRepo, postRepo)
 
@@ -75,7 +76,8 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	// Cron 任务
 	userMetricsJob := job.NewUserMetricsJob(userService, userMetricsService, userFollowService)
 	postMetricsJob := job.NewPostMetricsJob(postService, postMetricsService, postActionService, userContentMetricsService)
-	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob)
+	userInterestJOb := job.NewUserInterestJob(userInterestRepo)
+	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb)
 
 	// Kafka 消费者管理
 	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, userFollowRepo, postRepo)
