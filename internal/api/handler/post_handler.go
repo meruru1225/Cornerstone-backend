@@ -150,3 +150,22 @@ func (s *PostHandler) GetPostSelf(c *gin.Context) {
 
 	response.Success(c, posts)
 }
+
+// GetPostByUserId 获取指定用户的公开帖子列表
+func (s *PostHandler) GetPostByUserId(c *gin.Context) {
+	targetUID, _ := strconv.ParseUint(c.Param("user_id"), 10, 64)
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	if targetUID == 0 {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+
+	posts, err := s.postSvc.GetPostByUserId(c.Request.Context(), targetUID, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, posts)
+}

@@ -4,11 +4,13 @@ import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
+	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/pkg/security"
 	"Cornerstone/internal/repository"
 	"context"
+	log "log/slog"
 	"strconv"
 	"time"
 
@@ -24,7 +26,7 @@ type UserService interface {
 	GetUserInfo(ctx context.Context, id uint64) (*dto.UserDTO, error)
 	GetUserHomeInfoById(ctx context.Context, id uint64) (*dto.UserDTO, error)
 	GetUserSimpleInfoByIds(ctx context.Context, ids []uint64) ([]*dto.UserDTO, error)
-	SearchUser(ctx context.Context, dto *dto.SearchUserDTO) ([]*model.User, error)
+	GetUserByCondition(ctx context.Context, dto *dto.GetUserByConditionDTO) ([]*model.User, error)
 	UpdateUserInfo(ctx context.Context, id uint64, dto *dto.UserDTO) error
 	UpdatePasswordFromToken(ctx context.Context, dto *dto.ForgetPasswordDTO) error
 	UpdatePasswordFromOld(ctx context.Context, id uint64, dto *dto.ChangePasswordDTO) error
@@ -35,17 +37,20 @@ type UserService interface {
 	BanUser(ctx context.Context, id uint64) error
 	UnBanUser(ctx context.Context, id uint64) error
 	CancelUser(ctx context.Context, id uint64) error
+	SearchUser(ctx context.Context, keyword string, page, pageSize int) ([]*dto.UserDTO, error)
 }
 
 type UserServiceImpl struct {
-	userRepo repository.UserRepo
-	roleRepo repository.RoleRepo
+	userRepo   repository.UserRepo
+	roleRepo   repository.RoleRepo
+	userESRepo es.UserRepo
 }
 
-func NewUserService(userRepo repository.UserRepo, roleRepo repository.RoleRepo) UserService {
+func NewUserService(userRepo repository.UserRepo, roleRepo repository.RoleRepo, userESRepo es.UserRepo) UserService {
 	return &UserServiceImpl{
-		userRepo: userRepo,
-		roleRepo: roleRepo,
+		userRepo:   userRepo,
+		roleRepo:   roleRepo,
+		userESRepo: userESRepo,
 	}
 }
 
@@ -259,7 +264,7 @@ func (s *UserServiceImpl) GetUserSimpleInfoByIds(ctx context.Context, ids []uint
 	return userDTOList, nil
 }
 
-func (s *UserServiceImpl) SearchUser(ctx context.Context, dto *dto.SearchUserDTO) ([]*model.User, error) {
+func (s *UserServiceImpl) GetUserByCondition(ctx context.Context, dto *dto.GetUserByConditionDTO) ([]*model.User, error) {
 	var user *model.User
 	var userList []*model.User
 	var err error
@@ -461,6 +466,25 @@ func (s *UserServiceImpl) CancelUser(ctx context.Context, id uint64) error {
 	return s.userRepo.DeleteUser(ctx, id)
 }
 
+func (s *UserServiceImpl) SearchUser(ctx context.Context, keyword string, page, pageSize int) ([]*dto.UserDTO, error) {
+	from := (page - 1) * pageSize
+	if from < 0 {
+		from = 0
+	}
+
+	esUsers, total, err := s.userESRepo.SearchUser(ctx, keyword, from, pageSize)
+	if err != nil {
+		log.ErrorContext(ctx, "service search user error", "err", err, "keyword", keyword)
+		return nil, err
+	}
+
+	if total == 0 {
+		return []*dto.UserDTO{}, nil
+	}
+
+	return s.batchToUserDTOFromES(esUsers)
+}
+
 func (s *UserServiceImpl) findUserByLoginCredentials(ctx context.Context, dto *dto.CredentialDTO) (*model.User, error) {
 	if dto.Username != nil && *dto.Username != "" {
 		return s.userRepo.GetUserByUsername(ctx, *dto.Username)
@@ -530,4 +554,31 @@ func (s *UserServiceImpl) getUserDetailLock(ctx context.Context, lockKey string,
 		return UnExpectedError
 	}
 	return nil
+}
+
+// batchToUserDTOFromES 批量转换辅助方法
+func (s *UserServiceImpl) batchToUserDTOFromES(esUsers []*es.UserES) ([]*dto.UserDTO, error) {
+	dtos := make([]*dto.UserDTO, 0, len(esUsers))
+
+	for _, u := range esUsers {
+		url := minio.GetPublicURL(u.AvatarURL)
+		gender := uint8(u.Gender)
+		dtoItem := &dto.UserDTO{
+			UserID:    &u.ID,
+			Nickname:  &u.Nickname,
+			Bio:       u.Bio,
+			AvatarURL: &url,
+			Gender:    &gender,
+			Region:    &u.Region,
+		}
+
+		if !u.Birthday.IsZero() {
+			birthday := u.Birthday.Format("2006-01-02")
+			dtoItem.Birthday = &birthday
+		}
+
+		dtos = append(dtos, dtoItem)
+	}
+
+	return dtos, nil
 }

@@ -6,7 +6,7 @@ import "time"
 type UserES struct {
 	ID             uint64    `json:"id"`
 	Nickname       string    `json:"nickname"`
-	Bio            string    `json:"bio"`
+	Bio            *string   `json:"bio,omitempty"`
 	AvatarURL      string    `json:"avatar_url"`
 	Gender         int       `json:"gender"`
 	Region         string    `json:"region"`

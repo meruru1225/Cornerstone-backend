@@ -278,18 +278,18 @@ func (s *UserHandler) CancelUser(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-func (s *UserHandler) SearchUser(c *gin.Context) {
-	var searchUserDTO dto.SearchUserDTO
-	err := c.ShouldBind(&searchUserDTO)
+func (s *UserHandler) GetUserByCondition(c *gin.Context) {
+	var conditionDTO dto.GetUserByConditionDTO
+	err := c.ShouldBindQuery(&conditionDTO)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	if searchUserDTO.ID == nil && searchUserDTO.Phone == nil && searchUserDTO.Username == nil && searchUserDTO.Nickname == nil {
+	if conditionDTO.ID == nil && conditionDTO.Phone == nil && conditionDTO.Username == nil && conditionDTO.Nickname == nil {
 		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
 		return
 	}
-	users, err := s.userSvc.SearchUser(c.Request.Context(), &searchUserDTO)
+	users, err := s.userSvc.GetUserByCondition(c.Request.Context(), &conditionDTO)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -414,4 +414,23 @@ func (s *UserHandler) UploadAvatar(c *gin.Context) {
 		return
 	}
 	response.Success(c, nil)
+}
+
+// SearchUser 普通用户搜人 (脱敏数据)
+func (s *UserHandler) SearchUser(c *gin.Context) {
+	keyword := c.Query("keyword")
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	if keyword == "" {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+
+	users, err := s.userSvc.SearchUser(c.Request.Context(), keyword, page, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, users)
 }

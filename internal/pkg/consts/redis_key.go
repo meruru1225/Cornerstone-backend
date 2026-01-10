@@ -29,4 +29,5 @@ const (
 const (
 	UserDetailLock       = "user:detail:lock:"
 	UserInterestInitLock = "lock:interest:init:"
+	ReportLock           = "report:lock:"
 )

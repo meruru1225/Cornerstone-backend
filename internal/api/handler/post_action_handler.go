@@ -257,3 +257,20 @@ func (h *PostActionHandler) GetUserCollections(c *gin.Context) {
 	}
 	response.Success(c, posts)
 }
+
+func (h *PostActionHandler) ReportPost(c *gin.Context) {
+	type req struct {
+		PostID uint64 `json:"post_id" binding:"required"`
+		Reason string `json:"reason" binding:"required"`
+	}
+	var r req
+	if err := c.ShouldBindJSON(&r); err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+	if err := h.actionSvc.ReportPost(c.Request.Context(), c.GetUint64("user_id"), r.PostID); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, nil)
+}

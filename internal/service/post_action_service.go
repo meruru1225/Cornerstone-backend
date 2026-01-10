@@ -8,6 +8,8 @@ import (
 	"Cornerstone/internal/repository"
 	"context"
 	"errors"
+	"fmt"
+	log "log/slog"
 	"strconv"
 	"time"
 
@@ -47,6 +49,8 @@ type PostActionService interface {
 
 	TrackPostView(ctx context.Context, userID, postID uint64) error
 	GetPostViewCount(ctx context.Context, postID uint64) (int64, error)
+
+	ReportPost(ctx context.Context, userID, postID uint64) error
 }
 
 type postActionServiceImpl struct {
@@ -350,6 +354,31 @@ func (s *postActionServiceImpl) GetPostViewCount(ctx context.Context, postID uin
 
 	_ = redis.SetWithExpiration(ctx, key, realCount, cacheExpiration)
 	return realCount, nil
+}
+
+func (s *postActionServiceImpl) ReportPost(ctx context.Context, userID, postID uint64) error {
+	reportLockKey := consts.ReportLock + strconv.FormatUint(userID, 10) + ":" + strconv.FormatUint(postID, 10)
+	set, err := redis.TryLock(ctx, reportLockKey, "1", 24*time.Hour, 0)
+	if err != nil || !set {
+		return errors.New("you have already reported this post today")
+	}
+
+	countKey := fmt.Sprintf("report:count:post:%d", postID)
+	err = redis.Incr(ctx, countKey)
+	if err != nil {
+		return err
+	}
+
+	count, err := redis.GetInt64(ctx, countKey)
+	if err != nil {
+		return err
+	}
+	if count >= 50 {
+		_ = s.postRepo.UpdatePostStatus(ctx, postID, 3)
+		log.WarnContext(ctx, "Post automatically hidden due to high report count", "postID", postID, "reports", count)
+	}
+
+	return nil
 }
 
 func (s *postActionServiceImpl) expandPostList(ctx context.Context, ids []uint64, pageSize int) (*dto.PostWaterfallDTO, error) {

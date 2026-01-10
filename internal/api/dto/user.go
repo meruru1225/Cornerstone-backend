@@ -15,8 +15,8 @@ type UserDTO struct {
 	CreatedAt *time.Time `json:"created_at,omitempty"`
 }
 
-// SearchUserDTO 搜索用户
-type SearchUserDTO struct {
+// GetUserByConditionDTO 搜索用户
+type GetUserByConditionDTO struct {
 	ID       *uint64 `json:"id,omitempty"`
 	Phone    *string `json:"phone,omitempty"`
 	Username *string `json:"username,omitempty"`

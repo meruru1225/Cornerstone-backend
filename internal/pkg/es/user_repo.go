@@ -8,9 +8,11 @@ import (
 
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/versiontype"
+	"github.com/goccy/go-json"
 )
 
 type UserRepo interface {
+	SearchUser(ctx context.Context, keyword string, from, size int) ([]*UserES, int64, error)
 	IndexUser(ctx context.Context, user *UserES, version int64) error
 	DeleteUser(ctx context.Context, id uint64) error
 }
@@ -20,6 +22,42 @@ type UserRepoImpl struct {
 
 func NewUserRepo() UserRepo {
 	return &UserRepoImpl{}
+}
+
+func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, size int) ([]*UserES, int64, error) {
+	query := &types.Query{
+		Match: map[string]types.MatchQuery{
+			"nickname": {
+				Query: keyword,
+			},
+		},
+	}
+
+	res, err := Client.Search().
+		Index(UserIndex).
+		Query(query).
+		From(from).
+		Size(size).
+		Do(ctx)
+
+	if err != nil {
+		log.ErrorContext(ctx, "ES search user error", "err", err, "keyword", keyword)
+		return nil, 0, err
+	}
+
+	total := res.Hits.Total.Value
+	users := make([]*UserES, 0, len(res.Hits.Hits))
+
+	for _, hit := range res.Hits.Hits {
+		var user UserES
+		if err := json.Unmarshal(hit.Source_, &user); err != nil {
+			log.ErrorContext(ctx, "unmarshal ES user error", "err", err)
+			continue
+		}
+		users = append(users, &user)
+	}
+
+	return users, total, nil
 }
 
 func (s *UserRepoImpl) IndexUser(ctx context.Context, user *UserES, version int64) error {

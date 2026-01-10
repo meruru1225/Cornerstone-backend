@@ -43,6 +43,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			userGroup.GET("/homeInfo", group.UserHandler.GetHomeInfo)
 			userGroup.GET("/simpleInfo", group.UserHandler.GetUserSimpleInfoById)
 			userGroup.GET("/simpleInfos", group.UserHandler.GetUserSimpleInfoByIds)
+			userGroup.GET("/searchUser", group.UserHandler.SearchUser)
 
 			authGroup := userGroup.Group("")
 			authGroup.Use(middleware.AuthMiddleware())
@@ -54,7 +55,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.PUT("/username", group.UserHandler.ChangeUsername)
 				authGroup.PUT("/phone", group.UserHandler.ChangePhone)
 				authGroup.POST("/avatar", group.UserHandler.UploadAvatar)
-				userGroup.POST("/cancelUser", group.UserHandler.CancelUser)
+				authGroup.POST("/cancelUser", group.UserHandler.CancelUser)
 			}
 
 			// 需要登录 & 拥有 admin 角色
@@ -63,7 +64,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			{
 				adminGroup.POST("/ban", group.UserHandler.BanUser)
 				adminGroup.POST("/unban", group.UserHandler.UnbanUser)
-				adminGroup.POST("/searchUser", group.UserHandler.SearchUser)
+				adminGroup.GET("/userByCondition", group.UserHandler.GetUserByCondition)
 				adminGroup.POST("/userRole", group.UserHandler.AddUserRole)
 				adminGroup.DELETE("/userRole", group.UserHandler.DeleteUserRole)
 			}
@@ -89,10 +90,10 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			{
 				metricsGroup.GET("/user-7d", group.UserMetricHandler.GetMetrics7Days)
 				metricsGroup.GET("/user-30d", group.UserMetricHandler.GetMetrics30Days)
-				metricsGroup.GET("user-content-7d", group.UserContentMetricHandler.GetMetrics7Days)
-				metricsGroup.GET("user-content-30d", group.UserContentMetricHandler.GetMetrics30Days)
-				metricsGroup.GET("post-7d", group.PostMetricHandler.GetMetrics7Days)
-				metricsGroup.GET("post-30d", group.PostMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/user-content-7d", group.UserContentMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/user-content-30d", group.UserContentMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/post-7d", group.PostMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/post-30d", group.PostMetricHandler.GetMetrics30Days)
 			}
 		}
 
@@ -104,6 +105,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authOptGroup.GET("/recommend", group.PostHandler.RecommendPost)
 				authOptGroup.GET("/search", group.PostHandler.SearchPost)
 				authOptGroup.GET("/detail/:post_id", group.PostHandler.GetPost)
+				authOptGroup.GET("/list/:user_id", group.PostHandler.GetPostByUserId)
 			}
 
 			authGroup := postGroup.Group("")
@@ -135,6 +137,8 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 
 				authActionGroup.GET("/my/likes", group.PostActionHandler.GetUserLikes)
 				authActionGroup.GET("/my/collections", group.PostActionHandler.GetUserCollections)
+
+				authActionGroup.POST("/report", group.PostActionHandler.ReportPost)
 			}
 		}
 	}
