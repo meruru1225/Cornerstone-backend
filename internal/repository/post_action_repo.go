@@ -30,9 +30,16 @@ type PostActionRepo interface {
 	CheckCommentLikeExists(ctx context.Context, userID, commentID uint64) (bool, error)
 	GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error)
 
+	CreateView(ctx context.Context, view *model.PostView) error
+
 	GetLikeCountByPostID(ctx context.Context, postID uint64) (int64, error)
 	GetCollectionCountByPostID(ctx context.Context, postID uint64) (int64, error)
 	GetCommentCountByPostID(ctx context.Context, postID uint64) (int64, error)
+	GetUserTotalLikes(ctx context.Context, userID uint64) (int64, error)
+	GetViewCountByPostID(ctx context.Context, postID uint64) (int64, error)
+	GetUserTotalCollects(ctx context.Context, userID uint64) (int64, error)
+	GetUserTotalComments(ctx context.Context, userID uint64) (int64, error)
+	GetUserTotalViews(ctx context.Context, userID uint64) (int64, error)
 }
 
 type PostActionRepoImpl struct {
@@ -109,7 +116,7 @@ func (s *PostActionRepoImpl) CreateComment(ctx context.Context, comment *model.P
 
 func (s *PostActionRepoImpl) DeleteComment(ctx context.Context, commentID uint64) (int64, error) {
 	result := s.db.WithContext(ctx).Model(&model.PostComment{}).
-		Where("id = ? AND is_deleted = ?", commentID, false).
+		Where("(id = ? OR root_id = ?) AND is_deleted = ?", commentID, commentID, false).
 		Update("is_deleted", true)
 
 	return result.RowsAffected, result.Error
@@ -182,6 +189,10 @@ func (s *PostActionRepoImpl) GetCommentLikeCount(ctx context.Context, commentID 
 	return count, err
 }
 
+func (s *PostActionRepoImpl) CreateView(ctx context.Context, view *model.PostView) error {
+	return s.db.WithContext(ctx).Create(view).Error
+}
+
 func (s *PostActionRepoImpl) GetLikeCountByPostID(ctx context.Context, postID uint64) (int64, error) {
 	var count int64
 	err := s.db.WithContext(ctx).Model(&model.Like{}).
@@ -202,6 +213,51 @@ func (s *PostActionRepoImpl) GetCommentCountByPostID(ctx context.Context, postID
 	var count int64
 	err := s.db.WithContext(ctx).Model(&model.PostComment{}).
 		Where("post_id = ? AND is_deleted = ?", postID, false).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *PostActionRepoImpl) GetUserTotalLikes(ctx context.Context, userID uint64) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Table("likes").
+		Joins("JOIN posts ON likes.post_id = posts.id").
+		Where("posts.user_id = ? AND posts.is_deleted = ?", userID, false).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *PostActionRepoImpl) GetUserTotalCollects(ctx context.Context, userID uint64) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Table("collections").
+		Joins("JOIN posts ON collections.post_id = posts.id").
+		Where("posts.user_id = ? AND posts.is_deleted = ?", userID, false).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *PostActionRepoImpl) GetUserTotalComments(ctx context.Context, userID uint64) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Table("post_comments").
+		Joins("JOIN posts ON post_comments.post_id = posts.id").
+		Where("posts.user_id = ? AND posts.is_deleted = ?", userID, false).
+		Where("post_comments.status = ? AND post_comments.is_deleted = ?", 1, false).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *PostActionRepoImpl) GetUserTotalViews(ctx context.Context, userID uint64) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Table("post_views").
+		Joins("JOIN posts ON post_views.post_id = posts.id").
+		Where("posts.user_id = ? AND posts.is_deleted = ?", userID, false).
+		Count(&count).Error
+	return count, err
+}
+
+func (s *PostActionRepoImpl) GetViewCountByPostID(ctx context.Context, postID uint64) (int64, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Model(&model.PostView{}).
+		Where("post_id = ?", postID).
 		Count(&count).Error
 	return count, err
 }

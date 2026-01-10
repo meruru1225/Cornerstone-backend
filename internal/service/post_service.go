@@ -22,11 +22,13 @@ type PostService interface {
 	RecommendPost(ctx context.Context, userID uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error
-	GetPostById(ctx context.Context, userID uint64, postID uint64) (*dto.PostDTO, error)
+	GetPostById(ctx context.Context, postID uint64) (*dto.PostDTO, error)
+	GetPost(ctx context.Context, userID uint64, postID uint64) (*dto.PostDTO, error)
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*dto.PostDTO, error)
 	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
+	UpdatePostCounts(ctx context.Context, pid uint64, likes int64, comments int64, collects int64, views int64) error
 	DeletePost(ctx context.Context, userID uint64, postID uint64) error
 }
 
@@ -108,7 +110,16 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 }
 
 // GetPostById 获取单个帖子
-func (s *postServiceImpl) GetPostById(ctx context.Context, userID uint64, PostID uint64) (*dto.PostDTO, error) {
+func (s *postServiceImpl) GetPostById(ctx context.Context, postID uint64) (*dto.PostDTO, error) {
+	post, err := s.postDBRepo.GetPost(ctx, postID)
+	if err != nil {
+		return nil, err
+	}
+	return s.toPostDTO(post)
+}
+
+// GetPost 获取单个帖子
+func (s *postServiceImpl) GetPost(ctx context.Context, userID uint64, PostID uint64) (*dto.PostDTO, error) {
 	post, err := s.postESRepo.GetPostById(ctx, PostID)
 	if err != nil {
 		return nil, err
@@ -178,6 +189,11 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 	}
 
 	return s.postDBRepo.UpdatePostContent(ctx, oldPost)
+}
+
+// UpdatePostCounts 更新帖子计数
+func (s *postServiceImpl) UpdatePostCounts(ctx context.Context, pid uint64, likes int64, comments int64, collects int64, views int64) error {
+	return s.postDBRepo.UpdatePostCounts(ctx, pid, likes, comments, collects, views)
 }
 
 // DeletePost 删除帖子

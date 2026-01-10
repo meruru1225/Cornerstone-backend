@@ -14,6 +14,7 @@ type PostComment struct {
 	ParentID      uint64    `gorm:"not null;default:0" json:"parentId"`                 // 0表示这是直接评论帖子
 	ReplyToUserID uint64    `gorm:"not null;default:0" json:"replyToUserId"`            // 0表示无回复目标
 	LikesCount    int       `gorm:"not null;default:0" json:"likesCount"`
+	Status        int8      `gorm:"not null;default:0" json:"status"`
 	IsDeleted     bool      `gorm:"type:tinyint(1);not null;default:0" json:"isDeleted"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`

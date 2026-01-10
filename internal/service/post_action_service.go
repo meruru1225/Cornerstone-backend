@@ -15,6 +15,11 @@ import (
 	"github.com/jinzhu/copier"
 )
 
+const (
+	CommentStatusPending  int8 = 0
+	CommentStatusApproved int8 = 1
+)
+
 type PostActionService interface {
 	LikePost(ctx context.Context, userID, postID uint64) error
 	CancelLikePost(ctx context.Context, userID, postID uint64) error
@@ -39,6 +44,9 @@ type PostActionService interface {
 	CancelLikeComment(ctx context.Context, userID, commentID uint64) error
 	IsCommentLiked(ctx context.Context, userID, commentID uint64) (bool, error)
 	GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error)
+
+	TrackPostView(ctx context.Context, userID, postID uint64) error
+	GetPostViewCount(ctx context.Context, postID uint64) (int64, error)
 }
 
 type postActionServiceImpl struct {
@@ -62,13 +70,13 @@ func NewPostActionService(
 }
 
 func (s *postActionServiceImpl) LikePost(ctx context.Context, userID, postID uint64) error {
-	return s.performAction(ctx, postID, consts.PostLikeKey, s.getPostCheck(ctx, postID), func() error {
+	return s.performAction(ctx, postID, consts.PostLikeKey, true, s.getPostCheck(ctx, postID), func() error {
 		return s.actionRepo.CreateLike(ctx, &model.Like{UserID: userID, PostID: postID, CreatedAt: time.Now()})
 	})
 }
 
 func (s *postActionServiceImpl) CancelLikePost(ctx context.Context, userID, postID uint64) error {
-	return s.revokeAction(ctx, postID, consts.PostLikeKey, s.getPostCheck(ctx, postID), func() (int64, error) {
+	return s.revokeAction(ctx, postID, consts.PostLikeKey, true, s.getPostCheck(ctx, postID), func() (int64, error) {
 		return s.actionRepo.DeleteLike(ctx, userID, postID)
 	})
 }
@@ -106,13 +114,13 @@ func (s *postActionServiceImpl) IsLiked(ctx context.Context, userID, postID uint
 }
 
 func (s *postActionServiceImpl) CollectPost(ctx context.Context, userID, postID uint64) error {
-	return s.performAction(ctx, postID, consts.PostCollectionKey, s.getPostCheck(ctx, postID), func() error {
+	return s.performAction(ctx, postID, consts.PostCollectionKey, true, s.getPostCheck(ctx, postID), func() error {
 		return s.actionRepo.CreateCollection(ctx, &model.Collection{UserID: userID, PostID: postID, CreatedAt: time.Now()})
 	})
 }
 
 func (s *postActionServiceImpl) CancelCollectPost(ctx context.Context, userID, postID uint64) error {
-	return s.revokeAction(ctx, postID, consts.PostCollectionKey, s.getPostCheck(ctx, postID), func() (int64, error) {
+	return s.revokeAction(ctx, postID, consts.PostCollectionKey, true, s.getPostCheck(ctx, postID), func() (int64, error) {
 		return s.actionRepo.DeleteCollection(ctx, userID, postID)
 	})
 }
@@ -147,39 +155,41 @@ func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64
 		}
 
 		if req.RootID > 0 {
-			rootComment, err := s.actionRepo.GetCommentByID(ctx, req.RootID)
-			if err != nil || rootComment == nil {
+			root, err := s.actionRepo.GetCommentByID(ctx, req.RootID)
+			if err != nil || root == nil || root.Status != CommentStatusApproved {
 				return ErrPostCommentNotFound
 			}
-			if rootComment.PostID != req.PostID {
-				return ErrPostCommentNotFound
-			}
-			if rootComment.RootID != 0 {
+			if root.PostID != req.PostID {
 				return ErrPostCommentNotFound
 			}
 		}
 
 		if req.ParentID > 0 {
-			if err := s.getCommentCheck(ctx, req.ParentID)(); err != nil {
+			parent, err := s.actionRepo.GetCommentByID(ctx, req.ParentID)
+			if err != nil || parent == nil || parent.Status != CommentStatusApproved {
 				return ErrPostCommentNotFound
 			}
 		}
 		return nil
 	}
 
-	return s.performAction(ctx, req.PostID, consts.PostCommentKey, check, func() error {
-		comment := &model.PostComment{}
-		_ = copier.Copy(comment, req)
-		comment.UserID = userID
-		comment.CreatedAt = time.Now()
-		comment.UpdatedAt = time.Now()
-		return s.actionRepo.CreateComment(ctx, comment)
-	})
+	if err := check(); err != nil {
+		return err
+	}
+
+	comment := &model.PostComment{}
+	_ = copier.Copy(comment, req)
+	comment.UserID = userID
+	comment.Status = CommentStatusPending
+	comment.CreatedAt = time.Now()
+	comment.UpdatedAt = time.Now()
+
+	return s.actionRepo.CreateComment(ctx, comment)
 }
 
-// DeleteComment 删除评论
 func (s *postActionServiceImpl) DeleteComment(ctx context.Context, userID, commentID uint64) error {
 	var targetPostID uint64
+	var isApproved bool
 
 	check := func() error {
 		comment, err := s.actionRepo.GetCommentByID(ctx, commentID)
@@ -190,6 +200,7 @@ func (s *postActionServiceImpl) DeleteComment(ctx context.Context, userID, comme
 			return UnauthorizedError
 		}
 		targetPostID = comment.PostID
+		isApproved = comment.Status == CommentStatusApproved
 		return nil
 	}
 
@@ -197,9 +208,14 @@ func (s *postActionServiceImpl) DeleteComment(ctx context.Context, userID, comme
 		return err
 	}
 
-	return s.revokeAction(ctx, targetPostID, consts.PostCommentKey, func() error { return nil }, func() (int64, error) {
-		return s.actionRepo.DeleteComment(ctx, commentID)
-	})
+	if isApproved {
+		return s.revokeAction(ctx, targetPostID, consts.PostCommentKey, true, func() error { return nil }, func() (int64, error) {
+			return s.actionRepo.DeleteComment(ctx, commentID)
+		})
+	}
+
+	_, err := s.actionRepo.DeleteComment(ctx, commentID)
+	return err
 }
 
 func (s *postActionServiceImpl) GetPostCommentCount(ctx context.Context, postID uint64) (int64, error) {
@@ -274,13 +290,13 @@ func (s *postActionServiceImpl) GetCollectedPosts(ctx context.Context, userID ui
 }
 
 func (s *postActionServiceImpl) LikeComment(ctx context.Context, userID, commentID uint64) error {
-	return s.performAction(ctx, commentID, consts.PostCommentLikeKey, s.getCommentCheck(ctx, commentID), func() error {
+	return s.performAction(ctx, commentID, consts.PostCommentLikeKey, false, s.getCommentCheck(ctx, commentID), func() error {
 		return s.actionRepo.CreateCommentLike(ctx, &model.CommentLike{UserID: userID, CommentID: commentID, CreatedAt: time.Now()})
 	})
 }
 
 func (s *postActionServiceImpl) CancelLikeComment(ctx context.Context, userID, commentID uint64) error {
-	return s.revokeAction(ctx, commentID, consts.PostCommentLikeKey, s.getCommentCheck(ctx, commentID), func() (int64, error) {
+	return s.revokeAction(ctx, commentID, consts.PostCommentLikeKey, false, s.getCommentCheck(ctx, commentID), func() (int64, error) {
 		return s.actionRepo.DeleteCommentLike(ctx, userID, commentID)
 	})
 }
@@ -301,6 +317,33 @@ func (s *postActionServiceImpl) GetCommentLikeCount(ctx context.Context, comment
 	}
 
 	realCount, err := s.actionRepo.GetCommentLikeCount(ctx, commentID)
+	if err != nil {
+		return 0, err
+	}
+
+	_ = redis.SetWithExpiration(ctx, key, realCount, cacheExpiration)
+	return realCount, nil
+}
+
+func (s *postActionServiceImpl) TrackPostView(ctx context.Context, userID, postID uint64) error {
+	return s.performAction(ctx, postID, consts.PostViewKey, true, s.getPostCheck(ctx, postID), func() error {
+		return s.actionRepo.CreateView(ctx, &model.PostView{
+			PostID:   postID,
+			UserID:   userID,
+			ViewedAt: time.Now(),
+		})
+	})
+}
+
+func (s *postActionServiceImpl) GetPostViewCount(ctx context.Context, postID uint64) (int64, error) {
+	key := consts.PostViewKey + strconv.FormatUint(postID, 10)
+
+	count, err := redis.GetInt64(ctx, key)
+	if err == nil {
+		return count, nil
+	}
+
+	realCount, err := s.actionRepo.GetViewCountByPostID(ctx, postID)
 	if err != nil {
 		return 0, err
 	}
@@ -352,11 +395,11 @@ func isDuplicateError(err error) bool {
 	return false
 }
 
-// performAction 辅助函数，用于执行点赞、收藏等操作
 func (s *postActionServiceImpl) performAction(
 	ctx context.Context,
 	targetID uint64,
 	redisKeyPrefix string,
+	shouldDirty bool,
 	checkFunc func() error,
 	repoFunc func() error,
 ) error {
@@ -372,15 +415,18 @@ func (s *postActionServiceImpl) performAction(
 	}
 
 	_ = redis.Incr(ctx, redisKeyPrefix+strconv.FormatUint(targetID, 10))
-	_ = redis.SAdd(ctx, consts.PostDirtyKey, targetID)
+
+	if shouldDirty {
+		_ = redis.SAdd(ctx, consts.PostDirtyKey, targetID)
+	}
 	return nil
 }
 
-// revokeAction 辅助函数，用于取消点赞、收藏等操作
 func (s *postActionServiceImpl) revokeAction(
 	ctx context.Context,
 	targetID uint64,
 	redisKeyPrefix string,
+	shouldDirty bool,
 	checkFunc func() error,
 	repoFunc func() (int64, error),
 ) error {
@@ -394,8 +440,10 @@ func (s *postActionServiceImpl) revokeAction(
 	}
 
 	if affected > 0 {
-		_ = redis.Decr(ctx, redisKeyPrefix+strconv.FormatUint(targetID, 10))
-		_ = redis.SAdd(ctx, consts.PostDirtyKey, targetID)
+		_ = redis.DecrBy(ctx, redisKeyPrefix+strconv.FormatUint(targetID, 10), affected)
+		if shouldDirty {
+			_ = redis.SAdd(ctx, consts.PostDirtyKey, targetID)
+		}
 	} else {
 		return ErrActionDuplicate
 	}

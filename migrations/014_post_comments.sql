@@ -9,6 +9,7 @@ CREATE TABLE `post_comments`
     `parent_id`        BIGINT        NOT NULL DEFAULT 0 COMMENT '直接父评论ID (0:这是直接评论帖子)',
     `reply_to_user_id` BIGINT        NOT NULL DEFAULT 0 COMMENT '被回复的用户ID (0:无)',
     `likes_count`      INT           NOT NULL DEFAULT 0 COMMENT '点赞数',
+    `status`           TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '评论状态',
     `is_deleted`       TINYINT(1)    NOT NULL DEFAULT 0 COMMENT '逻辑删除',
     `created_at`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP,
     `updated_at`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,

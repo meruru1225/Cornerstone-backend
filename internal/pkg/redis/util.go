@@ -5,6 +5,7 @@ import (
 	"errors"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -114,9 +115,9 @@ func Incr(ctx context.Context, key string) error {
 	return Rdb.Incr(ctx, key).Err()
 }
 
-// Decr 自减
-func Decr(ctx context.Context, key string) error {
-	return Rdb.Decr(ctx, key).Err()
+// DecrBy 自减
+func DecrBy(ctx context.Context, key string, value int64) error {
+	return Rdb.DecrBy(ctx, key, value).Err()
 }
 
 // GetInt64 获取 int64 类型的值
@@ -133,6 +134,23 @@ func GetInt64(ctx context.Context, key string) (int64, error) {
 
 func Rename(ctx context.Context, oldKey string, newKey string) error {
 	return Rdb.Rename(ctx, oldKey, newKey).Err()
+}
+
+func SetWithMidnightExpiration(ctx context.Context, key string, data any) error {
+	bs, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+
+	now := time.Now()
+	midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
+	expiration := time.Until(midnight) - time.Minute*5
+
+	if expiration <= 0 {
+		expiration = time.Minute * 1
+	}
+
+	return SetWithExpiration(ctx, key, string(bs), expiration)
 }
 
 // DeleteKey 删除一个键

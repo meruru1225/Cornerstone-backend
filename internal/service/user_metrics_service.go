@@ -5,6 +5,7 @@ import (
 	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/redis"
+	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/repository"
 	"context"
 	"strconv"
@@ -30,13 +31,14 @@ func NewUserMetricsService(userMetricsRepo repository.UserMetricsRepo, userFollo
 		userFollowRepo:  userFollowRepo,
 	}
 }
+
 func (s *userMetricsServiceImpl) SyncUserDailyMetric(ctx context.Context, userID uint64) error {
 	followerCount, err := s.userFollowRepo.GetUserFollowerCount(ctx, userID)
 	if err != nil {
 		return err
 	}
 
-	today := getMidnight(time.Now())
+	today := util.GetMidnight(time.Now())
 	metric := &model.UserMetrics{
 		UserID:         userID,
 		TotalFollowers: int(followerCount),
@@ -67,21 +69,11 @@ func (s *userMetricsServiceImpl) getUserMetricsByDays(
 	days int,
 	fetchFromDB func() ([]*model.UserMetrics, error),
 ) ([]*dto.UserMetricDTO, error) {
-	list, err := redis.GetList(ctx, key)
-	if err != nil {
-		return nil, err
-	}
-
-	if len(list) != 0 {
-		metrics := make([]*dto.UserMetricDTO, 0, len(list))
-		for _, v := range list {
-			var metric *dto.UserMetricDTO
-			if err := json.Unmarshal([]byte(v), &metric); err != nil {
-				return nil, err
-			}
-			metrics = append(metrics, metric)
+	if val, err := redis.GetValue(ctx, key); err == nil && val != "" {
+		var metrics []*dto.UserMetricDTO
+		if err := json.Unmarshal([]byte(val), &metrics); err == nil {
+			return metrics, nil
 		}
-		return metrics, nil
 	}
 
 	rawData, err := fetchFromDB()
@@ -89,8 +81,7 @@ func (s *userMetricsServiceImpl) getUserMetricsByDays(
 		return nil, err
 	}
 
-	startTime := getMidnight(time.Now()).AddDate(0, 0, -days)
-
+	startTime := util.GetMidnight(time.Now()).AddDate(0, 0, -days)
 	var baseline *model.UserMetrics
 	if len(rawData) == 0 || !rawData[0].MetricDate.Equal(startTime) {
 		baseline, _ = s.userMetricsRepo.GetLatestMetricBefore(ctx, userID, startTime)
@@ -100,29 +91,9 @@ func (s *userMetricsServiceImpl) getUserMetricsByDays(
 
 	finalMetrics := s.fillMetricsGaps(rawData, days, baseline)
 
-	s.cacheMetrics(ctx, key, finalMetrics)
+	_ = redis.SetWithMidnightExpiration(ctx, key, finalMetrics)
+
 	return finalMetrics, nil
-}
-
-func (s *userMetricsServiceImpl) cacheMetrics(ctx context.Context, key string, metrics []*dto.UserMetricDTO) {
-	metricJsons := make([]string, 0, len(metrics))
-	for _, v := range metrics {
-		metricJson, err := json.Marshal(v)
-		if err != nil {
-			return
-		}
-		metricJsons = append(metricJsons, string(metricJson))
-	}
-
-	// 计算距离午夜的时间，提前5分钟过期
-	now := time.Now()
-	midnight := time.Date(now.Year(), now.Month(), now.Day()+1, 0, 0, 0, 0, now.Location())
-	expiration := time.Until(midnight) - time.Minute*5
-	if expiration < 0 {
-		return
-	}
-
-	_ = redis.SetListWithExpiration(ctx, key, metricJsons, expiration)
 }
 
 func (s *userMetricsServiceImpl) fillMetricsGaps(rawData []*model.UserMetrics, days int, baseline *model.UserMetrics) []*dto.UserMetricDTO {
@@ -136,7 +107,7 @@ func (s *userMetricsServiceImpl) fillMetricsGaps(rawData []*model.UserMetrics, d
 	var lastValid = baseline
 
 	for i := days - 1; i >= 0; i-- {
-		currentDate := getMidnight(now.AddDate(0, 0, -i))
+		currentDate := util.GetMidnight(now.AddDate(0, 0, -i))
 		dateStr := currentDate.Format(time.DateOnly)
 
 		count := 0
@@ -154,8 +125,4 @@ func (s *userMetricsServiceImpl) fillMetricsGaps(rawData []*model.UserMetrics, d
 	}
 
 	return finalDTOs
-}
-
-func getMidnight(t time.Time) time.Time {
-	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

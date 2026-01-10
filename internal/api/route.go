@@ -83,12 +83,16 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			}
 		}
 
-		userMetricsGroup := apiGroup.Group("/user-metrics")
+		metricsGroup := apiGroup.Group("/metrics")
 		{
-			userMetricsGroup.Use(middleware.AuthMiddleware())
+			metricsGroup.Use(middleware.AuthMiddleware())
 			{
-				userMetricsGroup.GET("/7d", group.UserMetricHandler.GetMetrics7Days)
-				userMetricsGroup.GET("/30d", group.UserMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/user-7d", group.UserMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/user-30d", group.UserMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("user-content-7d", group.UserContentMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("user-content-30d", group.UserContentMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("post-7d", group.PostMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("post-30d", group.PostMetricHandler.GetMetrics30Days)
 			}
 		}
 
@@ -116,12 +120,15 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 		{
 			postActionGroup.GET("/comments", group.PostActionHandler.GetComments)
 			postActionGroup.GET("/sub-comments", group.PostActionHandler.GetSubComments)
+			postActionGroup.POST("/batch-likes", group.PostActionHandler.GetBatchLikes)
 
 			authActionGroup := postActionGroup.Group("")
 			authActionGroup.Use(middleware.AuthMiddleware())
 			{
 				authActionGroup.POST("/like", group.PostActionHandler.LikePost)
 				authActionGroup.POST("/collect", group.PostActionHandler.CollectPost)
+				authActionGroup.GET("/state", group.PostActionHandler.GetPostActionState)
+
 				authActionGroup.POST("/comment", group.PostActionHandler.CreateComment)
 				authActionGroup.DELETE("/comment/:comment_id", group.PostActionHandler.DeleteComment)
 				authActionGroup.POST("/comment/like", group.PostActionHandler.LikeComment)

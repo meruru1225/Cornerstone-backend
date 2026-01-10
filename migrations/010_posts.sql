@@ -8,6 +8,7 @@ CREATE TABLE `posts`
     `likes_count`     INT        NOT NULL DEFAULT 0 COMMENT '点赞数',
     `comments_count`  INT        NOT NULL DEFAULT 0 COMMENT '评论数',
     `collects_count`  INT        NOT NULL DEFAULT 0 COMMENT '收藏数',
+    `views_count`      INT        NOT NULL DEFAULT 0 COMMENT '浏览数',
     `status`          TINYINT    NOT NULL DEFAULT 0 COMMENT '状态(0:审核中, 1:已发布, 2:拒绝, 3:待人工)',
     `is_deleted`      TINYINT(1) NOT NULL DEFAULT 0 COMMENT '逻辑删除标志 (0:否, 1:是)',
     `created_at`      DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',

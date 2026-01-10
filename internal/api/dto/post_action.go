@@ -30,6 +30,26 @@ type CommentDTO struct {
 	SubCommentCount int64         `json:"sub_comment_count"`
 }
 
+// PostActionStateDTO 帖子交互状态数据
+type PostActionStateDTO struct {
+	LikeCount    int64 `json:"like_count"`
+	CollectCount int64 `json:"collect_count"`
+	CommentCount int64 `json:"comment_count"`
+	ViewCount    int64 `json:"view_count"`
+	IsLiked      bool  `json:"is_liked"`
+	IsCollected  bool  `json:"is_collected"`
+}
+
+// PostBatchLikesReq 批量获取点赞数请求
+type PostBatchLikesReq struct {
+	PostIDs []uint64 `json:"post_ids" binding:"required,min=1,max=100"`
+}
+
+// PostBatchLikesDTO 批量获取点赞数响应
+type PostBatchLikesDTO struct {
+	Likes map[uint64]int64 `json:"likes"`
+}
+
 // PostActionReq 点赞/收藏通用请求
 type PostActionReq struct {
 	PostID uint64 `json:"post_id" binding:"required"`

@@ -123,7 +123,7 @@ func (s *PostHandler) GetPost(c *gin.Context) {
 		return
 	}
 
-	post, err := s.postSvc.GetPostById(c.Request.Context(), userID, uint64(postID))
+	post, err := s.postSvc.GetPost(c.Request.Context(), userID, uint64(postID))
 	if err != nil {
 		response.Error(c, err)
 		return

@@ -18,6 +18,7 @@ type Post struct {
 	LikesCount    int       `gorm:"not null;default:0" json:"likes_count"`
 	CommentsCount int       `gorm:"not null;default:0" json:"comments_count"`
 	CollectsCount int       `gorm:"not null;default:0" json:"collects_count"`
+	ViewsCount    int       `gorm:"not null;default:0" json:"views_count"`
 	Status        int8      `gorm:"not null;default:0" json:"status"` // 0:审核, 1:发布, 2:拒绝
 	IsDeleted     bool      `gorm:"type:tinyint(1);not null;default:0" json:"is_deleted"`
 	CreatedAt     time.Time `json:"created_at"`

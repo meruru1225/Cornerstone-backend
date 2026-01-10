@@ -4,6 +4,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"time"
 )
 
 var tagRegex = regexp.MustCompile(`#(\S+)`)
@@ -54,4 +55,9 @@ func StrSliceToUInt64Slice(strSlice []string) ([]uint64, error) {
 		intSlice[i] = num
 	}
 	return intSlice, nil
+}
+
+// GetMidnight 获取当天 0 点时间
+func GetMidnight(t time.Time) time.Time {
+	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }

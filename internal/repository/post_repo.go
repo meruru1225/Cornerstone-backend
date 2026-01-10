@@ -17,6 +17,7 @@ type PostRepo interface {
 	DeletePost(ctx context.Context, id uint64) error
 	UpdatePostContent(ctx context.Context, post *model.Post) error
 	UpdatePostStatus(ctx context.Context, id uint64, status int) error
+	UpdatePostCounts(ctx context.Context, pid uint64, likes int64, comments int64, collects int64, views int64) error
 	GetPostMedias(ctx context.Context, postId uint64) (model.MediaList, error)
 	GetPostTagNames(ctx context.Context, postId uint64) ([]string, error)
 	SyncPostMainTag(ctx context.Context, postID uint64, tagName string) error
@@ -47,7 +48,7 @@ func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, err
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
 		}).
-		Where("id = ? AND is_deleted = ?", id, false).
+		Where("id IN ? AND is_deleted = ? AND status = ?", id, false, 1).
 		First(&post).Error
 
 	if err != nil {
@@ -69,7 +70,7 @@ func (s *PostRepoImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*model
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
 		}).
-		Where("id IN ? AND is_deleted = ?", ids, false).
+		Where("id IN ? AND is_deleted = ? AND status = ?", ids, false, 1).
 		Find(&posts).Error
 
 	return posts, err
@@ -152,6 +153,15 @@ func (s *PostRepoImpl) UpdatePostContent(ctx context.Context, post *model.Post) 
 // UpdatePostStatus 更新笔记状态
 func (s *PostRepoImpl) UpdatePostStatus(ctx context.Context, id uint64, status int) error {
 	return s.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", id).Update("status", status).Error
+}
+
+func (s *PostRepoImpl) UpdatePostCounts(ctx context.Context, pid uint64, likes int64, comments int64, collects int64, views int64) error {
+	return s.db.WithContext(ctx).Model(&model.Post{}).Where("id = ?", pid).Updates(map[string]interface{}{
+		"likes_count":    likes,
+		"comments_count": comments,
+		"collects_count": collects,
+		"views_count":    views,
+	}).Error
 }
 
 // DeletePost 逻辑删除
