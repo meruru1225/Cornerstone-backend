@@ -16,6 +16,7 @@ type Config struct {
 	KafkaUserDetailConsumer  KafkaUserDetailConsumer `mapstructure:"kafka_user_detail_consumer"`
 	KafkaUserFollowsConsumer KafkaUserFollowConsumer `mapstructure:"kafka_user_follow_consumer"`
 	KafkaPostConsumer        KafkaPostConsumer       `mapstructure:"kafka_post_consumer"`
+	KafkaCommentConsumer     KafkaCommentConsumer    `mapstructure:"kafka_comment_consumer"`
 }
 
 // ServerConfig Server配置
@@ -143,6 +144,11 @@ type KafkaUserFollowConsumer struct {
 }
 
 type KafkaPostConsumer struct {
+	Topic   string `mapstructure:"topic"`
+	GroupID string `mapstructure:"group_id"`
+}
+
+type KafkaCommentConsumer struct {
 	Topic   string `mapstructure:"topic"`
 	GroupID string `mapstructure:"group_id"`
 }

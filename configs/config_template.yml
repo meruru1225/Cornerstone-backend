@@ -95,3 +95,7 @@ kafka_user_follow_consumer:
 kafka_post_consumer:
   topic: "{{KAFKA_POST_TOPIC}}"
   group_id: "{{KAFKA_POST_GROUP_ID}}"
+
+kafka_comment_consumer:
+  topic: "{{KAFKA_COMMENT_TOPIC}}"
+  group_id: "{{KAFKA_COMMENT_GROUP_ID}}"

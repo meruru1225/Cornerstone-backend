@@ -66,10 +66,11 @@ func (s *UserDetailHandler) toESModel(message *CanalMessage) (*es.UserES, error)
 
 	row := message.Data[0]
 
+	bio := StrToString(row["bio"])
 	model := &es.UserES{
 		ID:             StrToUint64(row["user_id"]),
 		Nickname:       StrToString(row["nickname"]),
-		Bio:            StrToString(row["bio"]),
+		Bio:            &bio,
 		AvatarURL:      StrToString(row["avatar_url"]),
 		Gender:         StrToInt(row["gender"]),
 		Region:         StrToString(row["region"]),

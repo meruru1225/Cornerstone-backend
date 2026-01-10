@@ -24,6 +24,9 @@ type ConsumerManager struct {
 
 	postConsumer sarama.ConsumerGroup
 	postHandler  sarama.ConsumerGroupHandler
+
+	commentsConsumer sarama.ConsumerGroup
+	commentsHandler  sarama.ConsumerGroupHandler
 }
 
 // NewConsumerManager 构造函数
@@ -33,6 +36,7 @@ func NewConsumerManager(
 	userESRepo es.UserRepo,
 	postESRepo es.PostRepo,
 	userDBRepo repository.UserRepo,
+	actionDBRepo repository.PostActionRepo,
 	userFollowDBRepo repository.UserFollowRepo,
 	postDBRepo repository.PostRepo,
 ) (*ConsumerManager, error) {
@@ -62,6 +66,12 @@ func NewConsumerManager(
 	}
 	postsHandler := NewPostsHandler(userDBRepo, postDBRepo, postESRepo, contentProcessor)
 
+	commentsConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaCommentConsumer.GroupID, saramaCfg)
+	if err != nil {
+		return nil, err
+	}
+	commentsHandler := NewCommentsHandler(actionDBRepo, contentProcessor)
+
 	return &ConsumerManager{
 		usersConsumer:       usersConsumer,
 		usersHandler:        usersHandler,
@@ -71,6 +81,8 @@ func NewConsumerManager(
 		userFollowsHandler:  userFollowsHandler,
 		postConsumer:        postsConsumer,
 		postHandler:         postsHandler,
+		commentsConsumer:    commentsConsumer,
+		commentsHandler:     commentsHandler,
 	}, nil
 }
 
@@ -124,6 +136,20 @@ func (m *ConsumerManager) Start(ctx context.Context, cfg *config.Config) error {
 		log.Info("Post consumer started", "topic", topic)
 		for {
 			if err := m.postConsumer.Consume(ctx, []string{topic}, m.postHandler); err != nil {
+				log.Error("Error from consumer", "err", err)
+			}
+			if ctx.Err() != nil {
+				return
+			}
+		}
+	}()
+
+	// 启动 Comment Consumer
+	go func() {
+		topic := cfg.KafkaCommentConsumer.Topic
+		log.Info("Comment consumer started", "topic", topic)
+		for {
+			if err := m.commentsConsumer.Consume(ctx, []string{topic}, m.commentsHandler); err != nil {
 				log.Error("Error from consumer", "err", err)
 			}
 			if ctx.Err() != nil {

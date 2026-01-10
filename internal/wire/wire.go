@@ -50,7 +50,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	contentProcesser := processor.NewContentLLMProcessor()
 
 	// Service 实例
-	userService := service.NewUserService(userRepo, roleRepo)
+	userService := service.NewUserService(userRepo, roleRepo, userESRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
 	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
@@ -80,7 +80,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb)
 
 	// Kafka 消费者管理
-	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, userFollowRepo, postRepo)
+	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, postActionRepo, userFollowRepo, postRepo)
 	if err != nil {
 		return nil, err
 	}
