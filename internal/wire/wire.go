@@ -53,7 +53,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 
 	// Agent
 	toolHandler := llm.NewToolHandler(postESRepo)
-	agent := llm.NewAgent(toolHandler)
+	agent := llm.NewAgent(toolHandler, messageMongoRepo)
 
 	// Processor
 	contentProcesser := processor.NewContentLLMProcessor()
