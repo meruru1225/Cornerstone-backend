@@ -120,14 +120,14 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	})
 	if err != nil {
 		return err
-	} else {
-		post.MainTag = aggress.MainTag
-		post.AITags = aggress.Tags
-		post.AISummary = aggress.Summary
-		if aggress.MainTag != "" {
-			if err = s.postDBRepo.SyncPostMainTag(ctx, post.ID, aggress.MainTag); err != nil {
-				return err
-			}
+	}
+
+	post.MainTag = aggress.MainTag
+	post.AITags = aggress.Tags
+	post.AISummary = aggress.Summary
+	if aggress.MainTag != "" {
+		if err = s.postDBRepo.SyncPostMainTag(ctx, post.ID, aggress.MainTag); err != nil {
+			return err
 		}
 	}
 
@@ -139,9 +139,9 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	vector, err := llm.GetVector(ctx, toLLMContent, aggress.Tags, aggress.Summary)
 	if err != nil {
 		return err
-	} else {
-		post.ContentVector = vector
 	}
+
+	post.ContentVector = vector
 
 	return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 }

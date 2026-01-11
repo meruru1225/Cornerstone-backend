@@ -28,9 +28,9 @@ func (s *RoleRepoImpl) GetRoleByIDs(ctx context.Context, id []uint64) (*[]*model
 	if result.Error != nil {
 		if errors.Is(result.Error, gorm.ErrRecordNotFound) {
 			return nil, nil
-		} else {
-			return nil, result.Error
 		}
+
+		return nil, result.Error
 	}
 	return &roles, nil
 }
