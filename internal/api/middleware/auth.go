@@ -4,6 +4,7 @@ import (
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/pkg/response"
 	"Cornerstone/internal/pkg/security"
+	"context"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -49,6 +50,9 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		c.Set("user_id", claims.UserID)
 		c.Set("roles", claims.Roles)
+
+		newCtx := context.WithValue(c.Request.Context(), "user_id", claims.UserID)
+		c.Request = c.Request.WithContext(newCtx)
 
 		c.Next()
 	}

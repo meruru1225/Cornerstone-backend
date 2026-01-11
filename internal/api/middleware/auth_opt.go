@@ -2,6 +2,7 @@ package middleware
 
 import (
 	"Cornerstone/internal/pkg/security"
+	"context"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -25,6 +26,8 @@ func AuthOptionalMiddleware() gin.HandlerFunc {
 			c.Set("user_id", uint64(0))
 		} else {
 			c.Set("user_id", claims.UserID)
+			newCtx := context.WithValue(c.Request.Context(), "user_id", claims.UserID)
+			c.Request = c.Request.WithContext(newCtx)
 		}
 
 		c.Next()

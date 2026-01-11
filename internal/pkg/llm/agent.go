@@ -1,10 +1,12 @@
 package llm
 
 import (
+	"Cornerstone/internal/pkg/mongo"
 	"context"
 	"fmt"
-	log "log/slog"
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/tmc/langchaingo/llms"
 	"golang.org/x/sync/errgroup"
@@ -20,12 +22,14 @@ type Agent interface {
 }
 
 type AgentImpl struct {
-	handler *ToolHandler
+	handler     *ToolHandler
+	messageRepo mongo.MessageRepo
 }
 
-func NewAgent(handler *ToolHandler) Agent {
+func NewAgent(handler *ToolHandler, messageRepo mongo.MessageRepo) Agent {
 	return &AgentImpl{
-		handler: handler,
+		handler:     handler,
+		messageRepo: messageRepo,
 	}
 }
 
@@ -62,8 +66,82 @@ func (s *AgentImpl) ChatSingle(ctx context.Context, userInput string) chan strin
 
 // Converse 多轮对话Agent
 func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string) chan string {
-	log.Info("聊天机器人-链式调用", "ctx", ctx, "question", question, "chatId", chatId)
-	return nil
+	out := make(chan string, 100)
+	convID, _ := strconv.ParseUint(chatId, 10, 64)
+	userID := ctx.Value("user_id").(uint64)
+
+	go func() {
+		defer close(out)
+
+		// 获取历史记录
+		history, _ := s.messageRepo.GetHistory(ctx, convID, 0, 20)
+
+		var messages []llms.MessageContent
+		messages = append(messages, llms.MessageContent{
+			Role:  llms.ChatMessageTypeSystem,
+			Parts: []llms.ContentPart{llms.TextPart(searchPrompt)},
+		})
+
+		// 转换历史记录
+		for i := len(history) - 1; i >= 0; i-- {
+			msg := history[i]
+			role := llms.ChatMessageTypeHuman
+			if msg.SenderID == 0 {
+				role = llms.ChatMessageTypeAI
+			}
+			messages = append(messages, llms.MessageContent{
+				Role:  role,
+				Parts: []llms.ContentPart{llms.TextPart(msg.Content)},
+			})
+		}
+
+		// 特殊处理：手动获取 Seq 并保存用户消息
+		userSeq, _ := s.messageRepo.GetNextSeq(ctx, convID)
+		userMsg := &mongo.Message{
+			ConversationID: convID,
+			SenderID:       userID,
+			MsgType:        1,
+			Content:        question,
+			Seq:            userSeq,
+			CreatedAt:      time.Now(),
+		}
+		_ = s.messageRepo.SaveMessage(ctx, userMsg)
+
+		messages = append(messages, llms.MessageContent{
+			Role:  llms.ChatMessageTypeHuman,
+			Parts: []llms.ContentPart{llms.TextPart(question)},
+		})
+
+		// 执行 Agent 推理
+		var aiFullContent strings.Builder
+		streamCapture := func(ctx context.Context, chunk []byte) error {
+			str := string(chunk)
+			if strings.HasPrefix(str, "[{") || strings.Contains(str, "\"tool_calls\"") {
+				return nil
+			}
+			aiFullContent.WriteString(str)
+			out <- str
+			return nil
+		}
+
+		_ = s.runAgentLoopWithCapture(ctx, messages, out, streamCapture, 5)
+
+		// 特殊处理：手动获取 Seq 并保存 AI 回答
+		if aiFullContent.Len() > 0 {
+			aiSeq, _ := s.messageRepo.GetNextSeq(ctx, convID)
+			aiMsg := &mongo.Message{
+				ConversationID: convID,
+				SenderID:       0,
+				MsgType:        1,
+				Content:        aiFullContent.String(),
+				Seq:            aiSeq,
+				CreatedAt:      time.Now(),
+			}
+			_ = s.messageRepo.SaveMessage(ctx, aiMsg)
+		}
+	}()
+
+	return out
 }
 
 // runAgentLoop 封装了通用的 ReAct 循环逻辑
@@ -153,6 +231,39 @@ func (s *AgentImpl) runAgentLoopStream(ctx context.Context, messages []llms.Mess
 	}
 	out <- "\n\n抱歉，由于检索轮次过多，我无法在安全时间内为您总结结果。"
 	return nil
+}
+
+// runAgentLoopWithCapture 封装了通用的 ReAct 循环逻辑，支持捕获中间状态
+func (s *AgentImpl) runAgentLoopWithCapture(ctx context.Context, messages []llms.MessageContent, out chan string, customStream func(context.Context, []byte) error, maxIter int) error {
+	for i := 0; i < maxIter; i++ {
+		resp, err := fetchAgentCall(ctx, messages, tools, 0.7, false, customStream)
+		if err != nil {
+			return err
+		}
+
+		choice := resp.Choices[0]
+
+		if len(choice.ToolCalls) == 0 {
+			return nil
+		}
+
+		// 向用户同步动作
+		for _, tc := range choice.ToolCalls {
+			out <- fmt.Sprintf("\n\n> 🛠️ **正在调取工具**: `%s` ...\n\n", tc.FunctionCall.Name)
+		}
+
+		messages = append(messages, llms.MessageContent{
+			Role:  llms.ChatMessageTypeAI,
+			Parts: s.convertToolCallsToParts(choice.ToolCalls),
+		})
+
+		toolMsgs, err := s.executeTools(ctx, choice.ToolCalls)
+		if err != nil {
+			return err
+		}
+		messages = append(messages, toolMsgs...)
+	}
+	return fmt.Errorf("达到最大迭代次数")
 }
 
 // ExecuteTools 通用的并行工具执行器

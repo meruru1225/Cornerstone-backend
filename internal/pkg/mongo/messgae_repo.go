@@ -12,6 +12,7 @@ type MessageRepo interface {
 	SaveMessage(ctx context.Context, msg *Message) error
 	GetHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*Message, error)
 	GetMessageBySeq(ctx context.Context, convID uint64, seq uint64) (*Message, error)
+	GetNextSeq(ctx context.Context, convID uint64) (uint64, error)
 }
 
 type messageRepoImpl struct {
@@ -75,4 +76,21 @@ func (s *messageRepoImpl) GetMessageBySeq(ctx context.Context, convID uint64, se
 		return nil, err
 	}
 	return &msg, nil
+}
+
+// GetNextSeq 原子自增并获取序号（ Agent 手动管理 Seq 的场景使用）
+func (s *messageRepoImpl) GetNextSeq(ctx context.Context, convID uint64) (uint64, error) {
+	filter := bson.M{"_id": convID}
+	update := bson.M{"$inc": bson.M{"current_seq": 1}}
+	opts := options.FindOneAndUpdate().SetUpsert(true).SetReturnDocument(options.After)
+
+	var result struct {
+		CurrentSeq uint64 `bson:"current_seq"`
+	}
+
+	err := s.col.FindOneAndUpdate(ctx, filter, update, opts).Decode(&result)
+	if err != nil {
+		return 0, err
+	}
+	return result.CurrentSeq, nil
 }
