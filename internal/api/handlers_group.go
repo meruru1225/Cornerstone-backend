@@ -15,4 +15,5 @@ type HandlersGroup struct {
 	IMHandler                *handler.IMHandler
 	WSHandler                *handler.WsHandler
 	SysBoxHandler            *handler.SysBoxHandler
+	MediaHandler             *handler.MediaHandler
 }

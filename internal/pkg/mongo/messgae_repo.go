@@ -9,13 +9,8 @@ import (
 )
 
 type MessageRepo interface {
-	// SaveMessage 保存消息明细
 	SaveMessage(ctx context.Context, msg *Message) error
-
-	// GetHistory 分页获取历史消息 (基于 Seq 的游标分页)
 	GetHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*Message, error)
-
-	// GetMessageBySeq 根据 Seq 获取单条消息 (用于撤回、查看上下文等)
 	GetMessageBySeq(ctx context.Context, convID uint64, seq uint64) (*Message, error)
 }
 
@@ -38,16 +33,15 @@ func (s *messageRepoImpl) SaveMessage(ctx context.Context, msg *Message) error {
 // GetHistory 历史消息查询逻辑
 // lastSeq 为当前页面最旧一条消息的序号。如果是第一页，传 0。
 func (s *messageRepoImpl) GetHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*Message, error) {
-	// 1. 基础过滤：指定会话 ID
+	// 基础过滤：指定会话 ID
 	filter := bson.M{"conversation_id": convID}
 
-	// 2. 游标过滤：如果是拉取历史记录，找比当前最旧序号 (lastSeq) 更小的消息
+	// 游标过滤：如果是拉取历史记录，找比当前最旧序号 (lastSeq) 更小的消息
 	if lastSeq > 0 {
 		filter["seq"] = bson.M{"$lt": lastSeq}
 	}
 
-	// 3. 排序与限制
-	// 按照 seq 降序排列 (最新的在前)，限制返回条数
+	// 排序与限制，按照 seq 降序排列 (最新的在前)，限制返回条数
 	findOptions := options.Find().
 		SetSort(bson.D{{Key: "seq", Value: -1}}).
 		SetLimit(int64(pageSize))
@@ -60,7 +54,7 @@ func (s *messageRepoImpl) GetHistory(ctx context.Context, convID uint64, lastSeq
 		_ = cursor.Close(ctx)
 	}()
 
-	// 4. 解析结果
+	// 解析结果
 	var messages []*Message
 	if err := cursor.All(ctx, &messages); err != nil {
 		return nil, err

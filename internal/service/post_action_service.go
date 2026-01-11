@@ -4,10 +4,12 @@ import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
+	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
 	"context"
 	"errors"
+	log "log/slog"
 	"strconv"
 	"time"
 
@@ -147,10 +149,20 @@ func (s *postActionServiceImpl) IsCollected(ctx context.Context, userID, postID 
 }
 
 func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64, req *dto.CommentCreateDTO) error {
+	var hdelKeys []string
+
+	for _, mediaDTO := range req.MediaInfo {
+		if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+			return err
+		}
+		hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
+	}
+
 	check := func() error {
 		if err := s.getPostCheck(ctx, req.PostID)(); err != nil {
 			return err
 		}
+
 		if req.RootID > 0 {
 			root, err := s.actionRepo.GetCommentByID(ctx, req.RootID)
 			if err != nil || root == nil || root.Status != CommentStatusApproved {
@@ -159,10 +171,21 @@ func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64
 			if root.PostID != req.PostID {
 				return ErrPostCommentNotFound
 			}
+
+			if req.ParentID == req.RootID {
+				return nil
+			}
 		}
+
 		if req.ParentID > 0 {
 			parent, err := s.actionRepo.GetCommentByID(ctx, req.ParentID)
 			if err != nil || parent == nil || parent.Status != CommentStatusApproved {
+				return ErrPostCommentNotFound
+			}
+			if parent.PostID != req.PostID {
+				return ErrPostCommentNotFound
+			}
+			if req.RootID > 0 && parent.RootID != req.RootID && parent.ID != req.RootID {
 				return ErrPostCommentNotFound
 			}
 		}
@@ -180,24 +203,44 @@ func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64
 	comment.CreatedAt = time.Now()
 	comment.UpdatedAt = time.Now()
 
-	return s.actionRepo.CreateComment(ctx, comment)
+	if err := s.actionRepo.CreateComment(ctx, comment); err != nil {
+		return err
+	}
+
+	if len(hdelKeys) > 0 {
+		go func() {
+			_ = redis.HDel(context.Background(), consts.MediaTempKey, hdelKeys...)
+		}()
+	}
+
+	return nil
 }
 
 func (s *postActionServiceImpl) DeleteComment(ctx context.Context, userID, commentID uint64) error {
-	check := func() error {
-		comment, err := s.actionRepo.GetCommentByID(ctx, commentID)
-		if err != nil || comment == nil {
-			return ErrPostCommentNotFound
-		}
-		if comment.UserID != userID {
-			return UnauthorizedError
-		}
-		return nil
+	comment, err := s.actionRepo.GetCommentByID(ctx, commentID)
+	if err != nil || comment == nil {
+		return ErrPostCommentNotFound
 	}
 
-	return s.revokeAction(check, func() error {
-		return s.actionRepo.DeleteComment(ctx, commentID)
-	})
+	if comment.UserID != userID {
+		return UnauthorizedError
+	}
+
+	if err = s.actionRepo.DeleteComment(ctx, commentID); err != nil {
+		return err
+	}
+
+	if len(comment.MediaInfo) > 0 {
+		go func() {
+			bgCtx := context.Background()
+			for _, m := range comment.MediaInfo {
+				_ = minio.DeleteFile(bgCtx, m.MediaURL)
+			}
+			log.Info("comment media resources cleaned up", "commentID", commentID)
+		}()
+	}
+
+	return nil
 }
 
 func (s *postActionServiceImpl) GetPostCommentCount(ctx context.Context, postID uint64) (int64, error) {
@@ -358,8 +401,16 @@ func (s *postActionServiceImpl) expandPostList(ctx context.Context, ids []uint64
 		if post.User.ID > 0 {
 			item.UserID = post.User.ID
 			item.Nickname = post.User.UserDetail.Nickname
-			item.AvatarURL = post.User.UserDetail.AvatarURL
+			item.AvatarURL = minio.GetPublicURL(post.User.UserDetail.AvatarURL)
 		}
+		for _, m := range item.Medias {
+			m.MediaURL = minio.GetPublicURL(m.MediaURL)
+			if m.CoverURL != nil {
+				url := minio.GetPublicURL(*m.CoverURL)
+				m.CoverURL = &url
+			}
+		}
+
 		item.CreatedAt = post.CreatedAt.Format("2006-01-02 15:04:05")
 		item.UpdatedAt = post.UpdatedAt.Format("2006-01-02 15:04:05")
 		list = append(list, item)
@@ -422,7 +473,7 @@ func (s *postActionServiceImpl) convertToCommentDTO(ctx context.Context, c *mode
 	user, _ := s.userRepo.GetUserHomeInfoById(ctx, c.UserID)
 	if user != nil {
 		dtoItem.Nickname = user.Nickname
-		dtoItem.AvatarURL = user.AvatarURL
+		dtoItem.AvatarURL = minio.GetPublicURL(user.AvatarURL)
 	}
 	if c.ReplyToUserID > 0 {
 		target, _ := s.userRepo.GetUserById(ctx, c.ReplyToUserID)
@@ -431,6 +482,13 @@ func (s *postActionServiceImpl) convertToCommentDTO(ctx context.Context, c *mode
 		}
 	}
 	dtoItem.CreatedAt = c.CreatedAt.Format("2006-01-02 15:04:05")
+	for _, m := range dtoItem.MediaInfo {
+		m.MediaURL = minio.GetPublicURL(m.MediaURL)
+		if m.CoverURL != nil {
+			url := minio.GetPublicURL(*m.CoverURL)
+			m.CoverURL = &url
+		}
+	}
 	commentLikeKey := consts.PostCommentLikeKey + strconv.FormatUint(c.ID, 10)
 	if val, err := redis.GetInt64(ctx, commentLikeKey); err == nil {
 		dtoItem.LikesCount = int(val)

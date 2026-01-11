@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	"net/http"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -18,6 +19,50 @@ import (
 	"github.com/disintegration/imaging"
 	"github.com/liuzl/gocc"
 )
+
+// GetSafeContentType 嗅探文件的真实 MIME 类型并校验合法性
+func GetSafeContentType(file io.ReadSeeker) (string, error) {
+	buffer := make([]byte, 512)
+	n, err := file.Read(buffer)
+	if err != nil && err != io.EOF {
+		return "", fmt.Errorf("读取文件流失败: %w", err)
+	}
+
+	contentType := http.DetectContentType(buffer[:n])
+
+	if _, err = file.Seek(0, io.SeekStart); err != nil {
+		return "", fmt.Errorf("重置文件指针失败: %w", err)
+	}
+
+	return contentType, nil
+}
+
+// GetDimensions 统一使用 ffprobe 获取媒体（图片/视频/动图）的宽高
+func GetDimensions(ctx context.Context, mediaUrl string) (int, int, error) {
+	ffprobePath := getLibPath(config.Cfg.LibPath.FFprobe)
+	cmd := exec.CommandContext(ctx, ffprobePath,
+		"-v", "error",
+		"-select_streams", "v:0",
+		"-show_entries", "stream=width,height",
+		"-of", "default=noprint_wrappers=1:nokey=1",
+		"-i", mediaUrl,
+	)
+
+	out, err := cmd.Output()
+	if err != nil {
+		return 0, 0, fmt.Errorf("ffprobe 解析媒体属性失败: %w", err)
+	}
+
+	lines := strings.Split(strings.TrimSpace(string(out)), "\n")
+	if len(lines) < 2 {
+		return 0, 0, fmt.Errorf("ffprobe 输出数据不足")
+	}
+
+	width, _ := strconv.Atoi(strings.TrimSpace(lines[0]))
+	height, _ := strconv.Atoi(strings.TrimSpace(lines[1]))
+
+	return width, height, nil
+}
 
 // GetDuration 获取视频时长
 func GetDuration(ctx context.Context, mediaUrl string) (float64, error) {

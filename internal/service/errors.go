@@ -22,6 +22,8 @@ var (
 	ErrCodeIncorrect           = errors.New("验证码错误")
 	ErrMissingLoginCredentials = errors.New("缺少登录凭据")
 	ErrSmsRegTokenIncorrect    = errors.New("短信注册token错误")
+	ErrFileNotSupported        = errors.New("不支持的文件类型")
+	ErrFileNotExist            = errors.New("文件不存在")
 	ErrUserFollowExist         = errors.New("用户已关注")
 	ErrUserFollowLimit         = errors.New("用户关注数量超过限制")
 	ErrUserFollowSelf          = errors.New("用户不能关注自己")
@@ -44,6 +46,8 @@ var ErrorMap = map[error]int{
 	ErrCodeIncorrect:           Unauthorized,
 	ErrMissingLoginCredentials: Unauthorized,
 	ErrSmsRegTokenIncorrect:    Unauthorized,
+	ErrFileNotSupported:        BadRequest,
+	ErrFileNotExist:            NotFound,
 	ErrUserFollowExist:         BadRequest,
 	ErrUserFollowLimit:         BadRequest,
 	ErrUserFollowSelf:          BadRequest,

@@ -16,6 +16,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/goccy/go-json"
 	"github.com/google/uuid"
 	"github.com/jinzhu/copier"
 )
@@ -143,17 +144,31 @@ func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, 
 
 // CreatePost 创建帖子
 func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error {
-	post := &model.Post{}
-	if err := copier.Copy(post, postDTO); err != nil {
-		return err
-	}
-	if err := copier.Copy(&post.MediaList, &postDTO.Medias); err != nil {
-		return err
+	var hdelKeys []string
+
+	for _, mediaDTO := range postDTO.Medias {
+		if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+			return err
+		}
+		hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
 	}
 
+	post := &model.Post{}
+	_ = copier.Copy(post, postDTO)
+	_ = copier.Copy(&post.MediaList, &postDTO.Medias)
 	post.UserID = userID
 
-	return s.postDBRepo.CreatePost(ctx, post)
+	if err := s.postDBRepo.CreatePost(ctx, post); err != nil {
+		return err
+	}
+
+	if len(hdelKeys) > 0 {
+		go func() {
+			_ = redis.HDel(context.Background(), consts.MediaTempKey, hdelKeys...)
+		}()
+	}
+
+	return nil
 }
 
 // GetPostById 获取单个帖子
@@ -264,6 +279,36 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		return UnauthorizedError
 	}
 
+	newMediaMap := make(map[string]struct{})
+	for _, m := range postDTO.Medias {
+		newMediaMap[m.MediaURL] = struct{}{}
+	}
+
+	var toDeleteKeys []string
+	for _, oldMedia := range oldPost.MediaList {
+		if _, exists := newMediaMap[oldMedia.MediaURL]; !exists {
+			toDeleteKeys = append(toDeleteKeys, oldMedia.MediaURL)
+		}
+	}
+
+	var hdelKeys []string
+	for _, mediaDTO := range postDTO.Medias {
+		isAlreadyInOld := false
+		for _, oldMedia := range oldPost.MediaList {
+			if oldMedia.MediaURL == mediaDTO.MediaURL {
+				isAlreadyInOld = true
+				break
+			}
+		}
+
+		if !isAlreadyInOld {
+			if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+				return err
+			}
+			hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
+		}
+	}
+
 	if err = copier.Copy(oldPost, postDTO); err != nil {
 		return err
 	}
@@ -271,7 +316,21 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		return err
 	}
 
-	return s.postDBRepo.UpdatePostContent(ctx, oldPost)
+	if err = s.postDBRepo.UpdatePostContent(ctx, oldPost); err != nil {
+		return err
+	}
+
+	go func() {
+		bgCtx := context.Background()
+		for _, key := range toDeleteKeys {
+			_ = minio.DeleteFile(bgCtx, key)
+		}
+		if len(hdelKeys) > 0 {
+			_ = redis.HDel(bgCtx, consts.MediaTempKey, hdelKeys...)
+		}
+	}()
+
+	return nil
 }
 
 // UpdatePostCounts 更新帖子计数
@@ -281,7 +340,6 @@ func (s *postServiceImpl) UpdatePostCounts(ctx context.Context, pid uint64, like
 
 // DeletePost 删除帖子
 func (s *postServiceImpl) DeletePost(ctx context.Context, userID uint64, postID uint64) error {
-	// 1. 鉴权
 	post, err := s.postDBRepo.GetPost(ctx, postID)
 	if err != nil {
 		return err
@@ -289,7 +347,20 @@ func (s *postServiceImpl) DeletePost(ctx context.Context, userID uint64, postID 
 	if post.UserID != userID {
 		return UnauthorizedError
 	}
-	return s.postDBRepo.DeletePost(ctx, postID)
+
+	if err = s.postDBRepo.DeletePost(ctx, postID); err != nil {
+		return err
+	}
+
+	if len(post.MediaList) > 0 {
+		go func() {
+			for _, m := range post.MediaList {
+				_ = minio.DeleteFile(context.Background(), m.MediaURL)
+			}
+		}()
+	}
+
+	return nil
 }
 
 func (s *postServiceImpl) RecordInterest(ctx context.Context, userID uint64, aiTags []string, actionType int) {
@@ -352,19 +423,24 @@ func (s *postServiceImpl) toPostDTO(post *model.Post) (*dto.PostDTO, error) {
 	if err := copier.Copy(&out.Medias, &post.MediaList); err != nil {
 		return nil, err
 	}
+	for _, m := range out.Medias {
+		m.MediaURL = minio.GetPublicURL(m.MediaURL)
+	}
+
+	defaultAvatarUrl := minio.GetPublicURL("default_avatar.png")
 
 	if post.User.ID > 0 {
 		out.UserID = post.User.ID
 		if post.User.UserDetail.UserID > 0 {
 			out.Nickname = post.User.UserDetail.Nickname
-			out.AvatarURL = post.User.UserDetail.AvatarURL
+			out.AvatarURL = minio.GetPublicURL(post.User.UserDetail.AvatarURL)
 		} else {
 			out.Nickname = "用户_" + strconv.FormatUint(post.User.ID, 10)
-			out.AvatarURL = "default_avatar.png"
+			out.AvatarURL = defaultAvatarUrl
 		}
 	} else {
 		out.Nickname = "未知用户"
-		out.AvatarURL = "default_avatar.png"
+		out.AvatarURL = defaultAvatarUrl
 	}
 
 	return out, nil
@@ -383,7 +459,7 @@ func (s *postServiceImpl) toPostDTOByES(post *es.PostES) (*dto.PostDTO, error) {
 	for _, media := range post.Media {
 		mediaBaseDTO = append(mediaBaseDTO, &dto.MediasBaseDTO{
 			MimeType: media.Type,
-			MediaURL: media.URL,
+			MediaURL: minio.GetPublicURL(media.URL),
 			Width:    media.Width,
 			Height:   media.Height,
 			Duration: media.Duration,
@@ -445,4 +521,25 @@ func getWaterfallPosts[T any](
 		List:    dtoItems,
 		HasMore: hasMore,
 	}, nil
+}
+
+func verifyAndFillMediaMeta(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
+	val, err := redis.HGet(ctx, consts.MediaTempKey, mediaDTO.MediaURL)
+	if err != nil || val == "" {
+		log.WarnContext(ctx, "media resource not found in temp cache", "url", mediaDTO.MediaURL)
+		return ErrFileNotExist
+	}
+
+	var meta dto.MediaTempMetadata
+	if err = json.Unmarshal([]byte(val), &meta); err != nil {
+		log.ErrorContext(ctx, "unmarshal media meta failed", "url", mediaDTO.MediaURL, "err", err)
+		return UnExpectedError
+	}
+
+	mediaDTO.Width = meta.Width
+	mediaDTO.Height = meta.Height
+	mediaDTO.Duration = int(meta.Duration)
+	mediaDTO.MimeType = meta.MimeType
+
+	return nil
 }

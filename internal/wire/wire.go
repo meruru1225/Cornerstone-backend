@@ -83,6 +83,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 		IMHandler:                handler.NewIMHandler(IMService),
 		WSHandler:                handler.NewWsHandler(IMService),
 		SysBoxHandler:            handler.NewSysBoxHandler(sysBoxService),
+		MediaHandler:             handler.NewMediaHandler(),
 	}
 
 	router := api.SetupRouter(handlers)
@@ -92,7 +93,8 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	postMetricsJob := job.NewPostMetricsJob(postService, postMetricsService, postActionService, userContentMetricsService)
 	userInterestJOb := job.NewUserInterestJob(userInterestRepo)
 	postCommentJob := job.NewPostCommentJob(postActionService)
-	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb, postCommentJob)
+	mediaCleanJob := job.NewMediaCleanupJob()
+	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb, postCommentJob, mediaCleanJob)
 
 	// Kafka 消费者管理
 	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, sysBoxRepo,

@@ -21,7 +21,7 @@ func NewPostActionHandler(actionSvc service.PostActionService) *PostActionHandle
 }
 
 // LikePost 点赞/取消点赞帖子
-func (h *PostActionHandler) LikePost(c *gin.Context) {
+func (s *PostActionHandler) LikePost(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	var req dto.PostActionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -31,9 +31,9 @@ func (h *PostActionHandler) LikePost(c *gin.Context) {
 
 	var err error
 	if req.Action == 1 {
-		err = h.actionSvc.LikePost(c.Request.Context(), userID, req.PostID)
+		err = s.actionSvc.LikePost(c.Request.Context(), userID, req.PostID)
 	} else {
-		err = h.actionSvc.CancelLikePost(c.Request.Context(), userID, req.PostID)
+		err = s.actionSvc.CancelLikePost(c.Request.Context(), userID, req.PostID)
 	}
 
 	if err != nil {
@@ -44,7 +44,7 @@ func (h *PostActionHandler) LikePost(c *gin.Context) {
 }
 
 // CollectPost 收藏/取消收藏帖子
-func (h *PostActionHandler) CollectPost(c *gin.Context) {
+func (s *PostActionHandler) CollectPost(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	var req dto.PostActionReq
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -54,9 +54,9 @@ func (h *PostActionHandler) CollectPost(c *gin.Context) {
 
 	var err error
 	if req.Action == 1 {
-		err = h.actionSvc.CollectPost(c.Request.Context(), userID, req.PostID)
+		err = s.actionSvc.CollectPost(c.Request.Context(), userID, req.PostID)
 	} else {
-		err = h.actionSvc.CancelCollectPost(c.Request.Context(), userID, req.PostID)
+		err = s.actionSvc.CancelCollectPost(c.Request.Context(), userID, req.PostID)
 	}
 
 	if err != nil {
@@ -67,7 +67,7 @@ func (h *PostActionHandler) CollectPost(c *gin.Context) {
 }
 
 // GetPostActionState 获取帖子详情页的全量交互状态并上报浏览
-func (h *PostActionHandler) GetPostActionState(c *gin.Context) {
+func (s *PostActionHandler) GetPostActionState(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	postID, err := strconv.ParseUint(c.Query("post_id"), 10, 64)
 	if err != nil || postID == 0 {
@@ -80,30 +80,30 @@ func (h *PostActionHandler) GetPostActionState(c *gin.Context) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		state.LikeCount, _ = h.actionSvc.GetPostLikeCount(gCtx, postID)
+		state.LikeCount, _ = s.actionSvc.GetPostLikeCount(gCtx, postID)
 		return nil
 	})
 	g.Go(func() error {
-		state.CollectCount, _ = h.actionSvc.GetPostCollectionCount(gCtx, postID)
+		state.CollectCount, _ = s.actionSvc.GetPostCollectionCount(gCtx, postID)
 		return nil
 	})
 	g.Go(func() error {
-		state.CommentCount, _ = h.actionSvc.GetPostCommentCount(gCtx, postID)
+		state.CommentCount, _ = s.actionSvc.GetPostCommentCount(gCtx, postID)
 		return nil
 	})
 	g.Go(func() error {
-		state.ViewCount, _ = h.actionSvc.GetPostViewCount(gCtx, postID)
+		state.ViewCount, _ = s.actionSvc.GetPostViewCount(gCtx, postID)
 		return nil
 	})
 	g.Go(func() error {
 		if userID > 0 {
-			state.IsLiked, _ = h.actionSvc.IsLiked(gCtx, userID, postID)
+			state.IsLiked, _ = s.actionSvc.IsLiked(gCtx, userID, postID)
 		}
 		return nil
 	})
 	g.Go(func() error {
 		if userID > 0 {
-			state.IsCollected, _ = h.actionSvc.IsCollected(gCtx, userID, postID)
+			state.IsCollected, _ = s.actionSvc.IsCollected(gCtx, userID, postID)
 		}
 		return nil
 	})
@@ -111,21 +111,21 @@ func (h *PostActionHandler) GetPostActionState(c *gin.Context) {
 	_ = g.Wait()
 
 	go func() {
-		_ = h.actionSvc.TrackPostView(c.Request.Context(), userID, postID)
+		_ = s.actionSvc.TrackPostView(c.Request.Context(), userID, postID)
 	}()
 
 	response.Success(c, state)
 }
 
 // GetBatchLikes 批量获取点赞数（用于瀑布流渲染）
-func (h *PostActionHandler) GetBatchLikes(c *gin.Context) {
+func (s *PostActionHandler) GetBatchLikes(c *gin.Context) {
 	var req dto.PostBatchLikesReq
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 
-	counts, err := h.actionSvc.GetPostLikeCounts(c.Request.Context(), req.PostIDs)
+	counts, err := s.actionSvc.GetPostLikeCounts(c.Request.Context(), req.PostIDs)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -141,7 +141,7 @@ func (h *PostActionHandler) GetBatchLikes(c *gin.Context) {
 }
 
 // CreateComment 发布评论
-func (h *PostActionHandler) CreateComment(c *gin.Context) {
+func (s *PostActionHandler) CreateComment(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	var req dto.CommentCreateDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
@@ -149,7 +149,7 @@ func (h *PostActionHandler) CreateComment(c *gin.Context) {
 		return
 	}
 
-	if err := h.actionSvc.CreateComment(c.Request.Context(), userID, &req); err != nil {
+	if err := s.actionSvc.CreateComment(c.Request.Context(), userID, &req); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -157,11 +157,11 @@ func (h *PostActionHandler) CreateComment(c *gin.Context) {
 }
 
 // DeleteComment 删除评论
-func (h *PostActionHandler) DeleteComment(c *gin.Context) {
+func (s *PostActionHandler) DeleteComment(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	commentID, _ := strconv.ParseUint(c.Param("comment_id"), 10, 64)
 
-	if err := h.actionSvc.DeleteComment(c.Request.Context(), userID, commentID); err != nil {
+	if err := s.actionSvc.DeleteComment(c.Request.Context(), userID, commentID); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -169,7 +169,7 @@ func (h *PostActionHandler) DeleteComment(c *gin.Context) {
 }
 
 // LikeComment 点赞/取消点赞评论
-func (h *PostActionHandler) LikeComment(c *gin.Context) {
+func (s *PostActionHandler) LikeComment(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	var req struct {
 		CommentID uint64 `json:"comment_id" binding:"required"`
@@ -182,9 +182,9 @@ func (h *PostActionHandler) LikeComment(c *gin.Context) {
 
 	var err error
 	if req.Action == 1 {
-		err = h.actionSvc.LikeComment(c.Request.Context(), userID, req.CommentID)
+		err = s.actionSvc.LikeComment(c.Request.Context(), userID, req.CommentID)
 	} else {
-		err = h.actionSvc.CancelLikeComment(c.Request.Context(), userID, req.CommentID)
+		err = s.actionSvc.CancelLikeComment(c.Request.Context(), userID, req.CommentID)
 	}
 
 	if err != nil {
@@ -195,12 +195,12 @@ func (h *PostActionHandler) LikeComment(c *gin.Context) {
 }
 
 // GetComments 获取帖子的评论列表
-func (h *PostActionHandler) GetComments(c *gin.Context) {
+func (s *PostActionHandler) GetComments(c *gin.Context) {
 	postID, _ := strconv.ParseUint(c.Query("post_id"), 10, 64)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	comments, err := h.actionSvc.GetCommentsByPostID(c.Request.Context(), postID, page, pageSize)
+	comments, err := s.actionSvc.GetCommentsByPostID(c.Request.Context(), postID, page, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -209,7 +209,7 @@ func (h *PostActionHandler) GetComments(c *gin.Context) {
 }
 
 // GetSubComments 获取二级评论详情
-func (h *PostActionHandler) GetSubComments(c *gin.Context) {
+func (s *PostActionHandler) GetSubComments(c *gin.Context) {
 	rootID, _ := strconv.ParseUint(c.Query("root_id"), 10, 64)
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
@@ -219,7 +219,7 @@ func (h *PostActionHandler) GetSubComments(c *gin.Context) {
 		return
 	}
 
-	comments, err := h.actionSvc.GetSubComments(c.Request.Context(), rootID, page, pageSize)
+	comments, err := s.actionSvc.GetSubComments(c.Request.Context(), rootID, page, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -228,7 +228,7 @@ func (h *PostActionHandler) GetSubComments(c *gin.Context) {
 }
 
 // GetUserLikes 获取我/他点赞的列表
-func (h *PostActionHandler) GetUserLikes(c *gin.Context) {
+func (s *PostActionHandler) GetUserLikes(c *gin.Context) {
 	targetUID, _ := strconv.ParseUint(c.Query("user_id"), 10, 64)
 	if targetUID == 0 {
 		targetUID = c.GetUint64("user_id") // 默认查自己
@@ -236,7 +236,7 @@ func (h *PostActionHandler) GetUserLikes(c *gin.Context) {
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	posts, err := h.actionSvc.GetLikedPosts(c.Request.Context(), targetUID, page, pageSize)
+	posts, err := s.actionSvc.GetLikedPosts(c.Request.Context(), targetUID, page, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -245,12 +245,12 @@ func (h *PostActionHandler) GetUserLikes(c *gin.Context) {
 }
 
 // GetUserCollections 获取我收藏的列表
-func (h *PostActionHandler) GetUserCollections(c *gin.Context) {
+func (s *PostActionHandler) GetUserCollections(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
-	posts, err := h.actionSvc.GetCollectedPosts(c.Request.Context(), userID, page, pageSize)
+	posts, err := s.actionSvc.GetCollectedPosts(c.Request.Context(), userID, page, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -258,7 +258,7 @@ func (h *PostActionHandler) GetUserCollections(c *gin.Context) {
 	response.Success(c, posts)
 }
 
-func (h *PostActionHandler) ReportPost(c *gin.Context) {
+func (s *PostActionHandler) ReportPost(c *gin.Context) {
 	type req struct {
 		PostID uint64 `json:"post_id" binding:"required"`
 		Reason string `json:"reason" binding:"required"`
@@ -268,7 +268,7 @@ func (h *PostActionHandler) ReportPost(c *gin.Context) {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
-	if err := h.actionSvc.ReportPost(c.Request.Context(), c.GetUint64("user_id"), r.PostID); err != nil {
+	if err := s.actionSvc.ReportPost(c.Request.Context(), c.GetUint64("user_id"), r.PostID); err != nil {
 		response.Error(c, err)
 		return
 	}

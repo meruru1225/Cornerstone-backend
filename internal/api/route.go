@@ -171,6 +171,11 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			sysbox.POST("/read", group.SysBoxHandler.MarkRead)
 			sysbox.POST("/read/all", group.SysBoxHandler.MarkAllRead)
 		}
+
+		mediaGroup := apiGroup.Group("/media")
+		{
+			mediaGroup.POST("/upload", group.MediaHandler.Upload)
+		}
 	}
 
 	return r

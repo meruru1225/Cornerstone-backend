@@ -3,11 +3,14 @@ package handler
 import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/response"
 	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/service"
 	"errors"
+	log "log/slog"
+	"path"
 	"strconv"
 	"strings"
 
@@ -386,12 +389,6 @@ func (s *UserHandler) UploadAvatar(c *gin.Context) {
 		return
 	}
 
-	contentType := file.Header.Get("Content-Type")
-	if contentType != "image/jpeg" && contentType != "image/png" {
-		c.JSON(400, gin.H{"error": "仅支持 JPG/PNG 格式"})
-		return
-	}
-
 	reader, err := file.Open()
 	if err != nil {
 		response.Error(c, err)
@@ -401,14 +398,26 @@ func (s *UserHandler) UploadAvatar(c *gin.Context) {
 		_ = reader.Close()
 	}()
 
-	UUID, err := uuid.NewUUID()
+	contentType, err := util.GetSafeContentType(reader)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	path, err := minio.UploadFile(c.Request.Context(), UUID.String(), reader, file.Size, contentType)
+	if !strings.HasPrefix(contentType, consts.MimePrefixImage) {
+		response.Error(c, service.ErrFileNotSupported)
+		return
+	}
 
-	err = s.userSvc.UpdateAvatar(c.Request.Context(), userID, path)
+	ext := path.Ext(file.Filename)
+	objectName := "avatars/" + uuid.NewString() + ext
+	fileKey, err := minio.UploadFile(c.Request.Context(), objectName, reader, file.Size, contentType)
+	if err != nil {
+		log.ErrorContext(c, "MinIO upload failed", "err", err)
+		response.Error(c, service.UnExpectedError)
+		return
+	}
+
+	err = s.userSvc.UpdateAvatar(c.Request.Context(), userID, fileKey)
 	if err != nil {
 		response.Error(c, err)
 		return

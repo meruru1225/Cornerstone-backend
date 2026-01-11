@@ -437,13 +437,18 @@ func (s *UserServiceImpl) UpdateAvatar(ctx context.Context, id uint64, objectNam
 	if user == nil {
 		return ErrUserNotFound
 	}
+	oldAvatar := user.UserDetail.AvatarURL
 	user.UserDetail.AvatarURL = objectName
 	err = s.userRepo.UpdateUserDetail(ctx, &user.UserDetail)
 	if err != nil {
 		return err
 	}
-	_ = redis.DeleteKey(ctx, consts.UserHomeInfoKey+strconv.FormatUint(id, 10))
-	_ = redis.DeleteKey(ctx, consts.UserSimpleInfoKey+strconv.FormatUint(id, 10))
+	if oldAvatar != "" {
+		_ = minio.DeleteFile(ctx, oldAvatar)
+	}
+	idStr := strconv.FormatUint(id, 10)
+	_ = redis.DeleteKey(ctx, consts.UserHomeInfoKey+idStr)
+	_ = redis.DeleteKey(ctx, consts.UserSimpleInfoKey+idStr)
 	return nil
 }
 

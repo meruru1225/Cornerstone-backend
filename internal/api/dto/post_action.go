@@ -2,12 +2,12 @@ package dto
 
 // CommentCreateDTO 创建评论请求
 type CommentCreateDTO struct {
-	PostID        uint64         `json:"post_id" binding:"required"`
-	Content       string         `json:"content" binding:"required,max=1000"`
-	MediaInfo     *MediasBaseDTO `json:"media_info"` // 复用之前的媒体 DTO
-	RootID        uint64         `json:"root_id"`    // 0 表示一级评论
-	ParentID      uint64         `json:"parent_id"`  // 父评论 ID
-	ReplyToUserID uint64         `json:"reply_to_user_id"`
+	PostID        uint64           `json:"post_id" binding:"required"`
+	Content       string           `json:"content" binding:"required,max=1000"`
+	MediaInfo     []*MediasBaseDTO `json:"media_info"` // 复用之前的媒体 DTO
+	RootID        uint64           `json:"root_id"`    // 0 表示一级评论
+	ParentID      uint64           `json:"parent_id"`  // 父评论 ID
+	ReplyToUserID uint64           `json:"reply_to_user_id"`
 }
 
 // CommentDTO 评论返回详情

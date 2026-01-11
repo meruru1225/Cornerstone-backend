@@ -55,6 +55,37 @@ func GetSet(ctx context.Context, key string) ([]string, error) {
 	return value, nil
 }
 
+// HGet 获取哈希表中指定字段的值
+func HGet(ctx context.Context, key string, field string) (string, error) {
+	value, err := Rdb.HGet(ctx, key, field).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return "", nil
+		}
+		return "", err
+	}
+	return value, nil
+}
+
+// HGetAll 获取哈希表中所有的字段和值
+func HGetAll(ctx context.Context, key string) (map[string]string, error) {
+	value, err := Rdb.HGetAll(ctx, key).Result()
+	if err != nil {
+		return nil, err
+	}
+	return value, nil
+}
+
+// HSet 设置哈希表中的字段和值
+func HSet(ctx context.Context, key string, field string, value interface{}) error {
+	return Rdb.HSet(ctx, key, field, value).Err()
+}
+
+// HDel 删除哈希表 key 中的一个或多个指定域，不存在的域将被忽略
+func HDel(ctx context.Context, key string, field ...string) error {
+	return Rdb.HDel(ctx, key, field...).Err()
+}
+
 // SAdd 向集合添加成员
 func SAdd(ctx context.Context, key string, member interface{}) error {
 	return Rdb.SAdd(ctx, key, member).Err()
