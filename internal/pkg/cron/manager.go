@@ -33,16 +33,16 @@ func NewCronManager(
 
 // RegisterJobs 注册定时任务
 func (s *Manager) RegisterJobs() error {
-	if _, err := s.engine.AddJob("@daily", s.userMetricJob); err != nil {
+	if _, err := s.engine.AddJob("@every 1m", s.userMetricJob); err != nil {
 		return err
 	}
-	if _, err := s.engine.AddJob("@daily", s.postMetricJob); err != nil {
+	if _, err := s.engine.AddJob("@every 1m", s.postMetricJob); err != nil {
 		return err
 	}
-	if _, err := s.engine.AddJob("@every 12h", s.userInterestJob); err != nil {
+	if _, err := s.engine.AddJob("@every 1m", s.userInterestJob); err != nil {
 		return err
 	}
-	if _, err := s.engine.AddJob("@daily", s.postCommentJob); err != nil {
+	if _, err := s.engine.AddJob("@every 1m", s.postCommentJob); err != nil {
 		return err
 	}
 	return nil
