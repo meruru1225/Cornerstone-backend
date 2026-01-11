@@ -12,6 +12,7 @@ require (
 	github.com/goccy/go-json v0.10.2
 	github.com/golang-jwt/jwt/v5 v5.3.0
 	github.com/google/uuid v1.6.0
+	github.com/gorilla/websocket v1.5.0
 	github.com/jinzhu/copier v0.4.0
 	github.com/liuzl/gocc v0.0.0-20231231122217-0372e1059ca5
 	github.com/minio/minio-go/v7 v7.0.97

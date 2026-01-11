@@ -45,7 +45,7 @@ type RedisConfig struct {
 }
 
 type MongoConfig struct {
-	URI      string `mapstructure:"uri"`
+	URL      string `mapstructure:"url"`
 	Database string `mapstructure:"database"`
 }
 

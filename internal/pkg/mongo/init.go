@@ -16,7 +16,7 @@ func InitMongo(cfg config.MongoConfig) (*mongo.Database, error) {
 	defer cancel()
 
 	// 建立连接
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.URI))
+	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.URL))
 	if err != nil {
 		return nil, err
 	}
