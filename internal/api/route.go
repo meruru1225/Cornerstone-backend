@@ -116,6 +116,13 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.DELETE("/:post_id", group.PostHandler.DeletePost)
 				authGroup.GET("/self", group.PostHandler.GetPostSelf)
 			}
+
+			auditGroup := authGroup.Group("/audit")
+			auditGroup.Use(middleware.AuthMiddleware(), middleware.CheckRoles("auditor", "admin"))
+			{
+				auditGroup.GET("/list", group.PostHandler.GetWarningPosts)
+				auditGroup.POST("/status", group.PostHandler.UpdatePostStatus)
+			}
 		}
 
 		postActionGroup := apiGroup.Group("/post-action")

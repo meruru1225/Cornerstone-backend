@@ -29,6 +29,8 @@ type PostService interface {
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*dto.PostDTO, error)
 	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	GetWarningPosts(ctx context.Context, lastID uint64, pageSize int) (*dto.PostWaterfallDTO, error)
+	UpdatePostStatus(ctx context.Context, postID uint64, status int) error
 	UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
 	UpdatePostCounts(ctx context.Context, pid uint64, likes int64, comments int64, collects int64, views int64) error
 	DeletePost(ctx context.Context, userID uint64, postID uint64) error
@@ -214,6 +216,42 @@ func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, 
 			return out, nil
 		},
 	)
+}
+
+// GetWarningPosts 获取所有待审核/警告状态的帖子
+func (s *postServiceImpl) GetWarningPosts(ctx context.Context, lastID uint64, pageSize int) (*dto.PostWaterfallDTO, error) {
+	// 1. 调用 Repo 使用游标查询
+	rawData, err := s.postDBRepo.GetPostsByStatusCursor(ctx, 2, lastID, pageSize+1)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 判定 HasMore
+	hasMore := false
+	if len(rawData) > pageSize {
+		hasMore = true
+		rawData = rawData[:pageSize]
+	}
+
+	// 3. 转换 DTO
+	dtoItems, err := s.batchToPostDTO(rawData)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.PostWaterfallDTO{
+		List:    dtoItems,
+		HasMore: hasMore,
+	}, nil
+}
+
+// UpdatePostStatus 更改帖子状态
+func (s *postServiceImpl) UpdatePostStatus(ctx context.Context, postID uint64, status int) error {
+	err := s.postDBRepo.UpdatePostStatus(ctx, postID, status)
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // UpdatePostContent 更新帖子内容及媒体

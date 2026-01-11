@@ -169,3 +169,34 @@ func (s *PostHandler) GetPostByUserId(c *gin.Context) {
 	}
 	response.Success(c, posts)
 }
+
+// GetWarningPosts 审核员：获取待审核列表
+func (s *PostHandler) GetWarningPosts(c *gin.Context) {
+	lastID, _ := strconv.ParseUint(c.DefaultQuery("last_id", "0"), 10, 64)
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+
+	posts, err := s.postSvc.GetWarningPosts(c.Request.Context(), lastID, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, posts)
+}
+
+// UpdatePostStatus 审核员：操作帖子（通过、封禁、驳回）
+func (s *PostHandler) UpdatePostStatus(c *gin.Context) {
+	var req struct {
+		PostID uint64 `json:"post_id" binding:"required"`
+		Status int    `json:"status" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+
+	if err := s.postSvc.UpdatePostStatus(c.Request.Context(), req.PostID, req.Status); err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, nil)
+}

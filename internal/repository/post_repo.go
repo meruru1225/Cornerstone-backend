@@ -14,6 +14,7 @@ type PostRepo interface {
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error)
 	GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
+	GetPostsByStatusCursor(ctx context.Context, status int, lastID uint64, limit int) ([]*model.Post, error)
 	DeletePost(ctx context.Context, id uint64) error
 	UpdatePostContent(ctx context.Context, post *model.Post) error
 	UpdatePostStatus(ctx context.Context, id uint64, status int) error
@@ -109,6 +110,19 @@ func (s *PostRepoImpl) GetPostSelf(ctx context.Context, userId uint64, limit, of
 		Order("created_at DESC").
 		Find(&posts).Error
 
+	return posts, err
+}
+
+// GetPostsByStatusCursor 根据笔记状态分页获取笔记
+func (s *PostRepoImpl) GetPostsByStatusCursor(ctx context.Context, status int, lastID uint64, limit int) ([]*model.Post, error) {
+	db := s.db.WithContext(ctx).Where("status = ?", status)
+
+	if lastID > 0 {
+		db = db.Where("id < ?", lastID)
+	}
+
+	var posts []*model.Post
+	err := db.Order("id DESC").Limit(limit).Find(&posts).Error
 	return posts, err
 }
 
