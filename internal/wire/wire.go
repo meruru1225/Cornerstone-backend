@@ -77,7 +77,8 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	userMetricsJob := job.NewUserMetricsJob(userService, userMetricsService, userFollowService)
 	postMetricsJob := job.NewPostMetricsJob(postService, postMetricsService, postActionService, userContentMetricsService)
 	userInterestJOb := job.NewUserInterestJob(userInterestRepo)
-	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb)
+	postCommentJob := job.NewPostCommentJob(postActionService)
+	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb, postCommentJob)
 
 	// Kafka 消费者管理
 	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, postActionRepo, userFollowRepo, postRepo)

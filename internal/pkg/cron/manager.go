@@ -12,12 +12,14 @@ type Manager struct {
 	userMetricJob   *job.UserMetricsJob
 	postMetricJob   *job.PostMetricsJob
 	userInterestJob *job.UserInterestJob
+	postCommentJob  *job.PostCommentJob
 }
 
 func NewCronManager(
 	userMetricJob *job.UserMetricsJob,
 	postMetricJob *job.PostMetricsJob,
 	userInterestJob *job.UserInterestJob,
+	postCommentJob *job.PostCommentJob,
 
 ) *Manager {
 	return &Manager{
@@ -25,6 +27,7 @@ func NewCronManager(
 		userMetricJob:   userMetricJob,
 		postMetricJob:   postMetricJob,
 		userInterestJob: userInterestJob,
+		postCommentJob:  postCommentJob,
 	}
 }
 
@@ -37,6 +40,9 @@ func (s *Manager) RegisterJobs() error {
 		return err
 	}
 	if _, err := s.engine.AddJob("@every 12h", s.userInterestJob); err != nil {
+		return err
+	}
+	if _, err := s.engine.AddJob("@daily", s.postCommentJob); err != nil {
 		return err
 	}
 	return nil

@@ -46,6 +46,7 @@ type PostActionService interface {
 	CancelLikeComment(ctx context.Context, userID, commentID uint64) error
 	IsCommentLiked(ctx context.Context, userID, commentID uint64) (bool, error)
 	GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error)
+	SyncCommentLikesCount(ctx context.Context, commentID uint64, count int) error
 
 	TrackPostView(ctx context.Context, userID, postID uint64) error
 	GetPostViewCount(ctx context.Context, postID uint64) (int64, error)
@@ -294,15 +295,25 @@ func (s *postActionServiceImpl) GetCollectedPosts(ctx context.Context, userID ui
 }
 
 func (s *postActionServiceImpl) LikeComment(ctx context.Context, userID, commentID uint64) error {
-	return s.performAction(ctx, commentID, consts.PostCommentLikeKey, false, s.getCommentCheck(ctx, commentID), func() error {
+	err := s.performAction(ctx, commentID, consts.PostCommentLikeKey, false, s.getCommentCheck(ctx, commentID), func() error {
 		return s.actionRepo.CreateCommentLike(ctx, &model.CommentLike{UserID: userID, CommentID: commentID, CreatedAt: time.Now()})
 	})
+	if err != nil {
+		return err
+	}
+	_ = redis.SAdd(ctx, consts.PostCommentLikeDirtyKey, commentID)
+	return nil
 }
 
 func (s *postActionServiceImpl) CancelLikeComment(ctx context.Context, userID, commentID uint64) error {
-	return s.revokeAction(ctx, commentID, consts.PostCommentLikeKey, false, s.getCommentCheck(ctx, commentID), func() (int64, error) {
+	err := s.revokeAction(ctx, commentID, consts.PostCommentLikeKey, false, s.getCommentCheck(ctx, commentID), func() (int64, error) {
 		return s.actionRepo.DeleteCommentLike(ctx, userID, commentID)
 	})
+	if err != nil {
+		return err
+	}
+	_ = redis.SAdd(ctx, consts.PostCommentLikeDirtyKey, commentID)
+	return nil
 }
 
 func (s *postActionServiceImpl) IsCommentLiked(ctx context.Context, userID, commentID uint64) (bool, error) {
@@ -327,6 +338,10 @@ func (s *postActionServiceImpl) GetCommentLikeCount(ctx context.Context, comment
 
 	_ = redis.SetWithExpiration(ctx, key, realCount, cacheExpiration)
 	return realCount, nil
+}
+
+func (s *postActionServiceImpl) SyncCommentLikesCount(ctx context.Context, commentID uint64, count int) error {
+	return s.actionRepo.UpdateCommentLikesCount(ctx, commentID, count)
 }
 
 func (s *postActionServiceImpl) TrackPostView(ctx context.Context, userID, postID uint64) error {
