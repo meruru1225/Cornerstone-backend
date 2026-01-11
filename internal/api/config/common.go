@@ -5,6 +5,7 @@ type Config struct {
 	Server                   ServerConfig            `mapstructure:"server"`
 	DB                       DBConfig                `mapstructure:"database"`
 	Redis                    RedisConfig             `mapstructure:"redis"`
+	Mongo                    MongoConfig             `mapstructure:"mongo"`
 	SMS                      SMSConfig               `mapstructure:"sms"`
 	LLM                      LLMConfig               `mapstructure:"llm"`
 	MinIO                    MinIOConfig             `mapstructure:"minio"`
@@ -37,6 +38,11 @@ type RedisConfig struct {
 	Password string `mapstructure:"password"`
 	DB       int    `mapstructure:"db"`
 	PoolSize int    `mapstructure:"pool_size"`
+}
+
+type MongoConfig struct {
+	URI      string `mapstructure:"uri"`
+	Database string `mapstructure:"database"`
 }
 
 type SMSConfig struct {

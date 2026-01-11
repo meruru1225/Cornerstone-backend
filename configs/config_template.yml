@@ -13,6 +13,10 @@ redis:
   db: 0
   pool_size: 10
 
+mongo:
+  url: "{{MONGO_ADDR}}"
+  database: "{{MONGO_DATABASE}}"
+
 sms:
   url: "{{SMS_URL}}"
   username: "{{SMS_USERNAME}}"

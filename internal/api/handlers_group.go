@@ -12,4 +12,6 @@ type HandlersGroup struct {
 	PostActionHandler        *handler.PostActionHandler
 	PostMetricHandler        *handler.PostMetricHandler
 	UserContentMetricHandler *handler.UserContentMetricHandler
+	IMHandler                *handler.IMHandler
+	WSHandler                *handler.WsHandler
 }

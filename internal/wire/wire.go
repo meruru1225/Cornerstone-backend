@@ -9,11 +9,14 @@ import (
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/kafka"
 	"Cornerstone/internal/pkg/llm"
+	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/processor"
 	"Cornerstone/internal/repository"
 	"Cornerstone/internal/service"
 
 	"github.com/gin-gonic/gin"
+	mongoDrive "go.mongodb.org/mongo-driver/mongo"
+
 	"gorm.io/gorm"
 )
 
@@ -21,11 +24,12 @@ import (
 type ApplicationContainer struct {
 	Router       *gin.Engine
 	DB           *gorm.DB
+	Mongo        *mongoDrive.Database
 	CronMgr      *cron.Manager
 	KafkaManager *kafka.ConsumerManager
 }
 
-func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, error) {
+func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.Config) (*ApplicationContainer, error) {
 	// 数据库 Repo 实例
 	userRepo := repository.NewUserRepo(db)
 	userRolesRepo := repository.NewUserRolesRepo(db)
@@ -37,6 +41,10 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	postActionRepo := repository.NewPostActionRepo(db)
 	postMetricsRepo := repository.NewPostMetricRepository(db)
 	userInterestRepo := repository.NewUserInterestRepository(db)
+	conversationRepo := repository.NewConversationRepo(db)
+
+	// Mongo 实例
+	messageMongoRepo := mongo.NewMessageRepo(mongoConn)
 
 	// ES 实例
 	userESRepo := es.NewUserRepo()
@@ -59,6 +67,7 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 	postService := service.NewPostService(postESRepo, postRepo, userInterestRepo)
 	postActionService := service.NewPostActionService(postActionRepo, postRepo, userRepo)
 	postMetricsService := service.NewPostMetricService(postMetricsRepo, postRepo)
+	IMService := service.NewIMService(conversationRepo, messageMongoRepo)
 
 	handlers := &api.HandlersGroup{
 		AgentHandler:             handler.NewAgentHandler(agent),
@@ -69,6 +78,8 @@ func BuildApplication(db *gorm.DB, cfg *config.Config) (*ApplicationContainer, e
 		PostActionHandler:        handler.NewPostActionHandler(postActionService),
 		PostMetricHandler:        handler.NewPostMetricHandler(postMetricsService),
 		UserContentMetricHandler: handler.NewUserContentMetricHandler(userContentMetricsService),
+		IMHandler:                handler.NewIMHandler(IMService),
+		WSHandler:                handler.NewWsHandler(IMService),
 	}
 
 	router := api.SetupRouter(handlers)

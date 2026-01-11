@@ -8,6 +8,7 @@ import (
 	"Cornerstone/internal/pkg/llm"
 	"Cornerstone/internal/pkg/logger"
 	"Cornerstone/internal/pkg/minio"
+	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/wire"
 	"context"
@@ -49,6 +50,14 @@ func main() {
 		panic(err)
 	}
 
+	// Mongo 连接
+	mongoCfg := config.Cfg.Mongo
+	mongoConn, err := mongo.InitMongo(mongoCfg)
+	if err != nil {
+		log.Error("Fatal error: failed to create mongo connection", "err", err)
+		panic(err)
+	}
+
 	// MinIO 连接
 	err = minio.Init()
 	if err != nil {
@@ -71,7 +80,7 @@ func main() {
 	}
 
 	// 依赖注入
-	app, err := wire.BuildApplication(db, cfg)
+	app, err := wire.BuildApplication(db, mongoConn, cfg)
 	if err != nil {
 		log.Error("Fatal error: failed to create application", "err", err)
 		panic(err)

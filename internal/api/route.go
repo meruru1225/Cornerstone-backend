@@ -148,6 +148,19 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authActionGroup.POST("/report", group.PostActionHandler.ReportPost)
 			}
 		}
+
+		imGroup := apiGroup.Group("/im")
+		{
+			imGroup.GET("", group.WSHandler.Connect)
+			authGroup := imGroup.Group("")
+			authGroup.Use(middleware.AuthMiddleware())
+			{
+				authGroup.POST("/message/send", group.IMHandler.SendMessage)
+				authGroup.GET("/message/history", group.IMHandler.GetChatHistory)
+				authGroup.GET("/conversations", group.IMHandler.GetConversationList)
+				authGroup.POST("/message/read", group.IMHandler.MarkAsRead)
+			}
+		}
 	}
 
 	return r

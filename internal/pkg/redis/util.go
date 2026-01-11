@@ -162,6 +162,20 @@ func SetWithMidnightExpiration(ctx context.Context, key string, data any) error 
 	return SetWithExpiration(ctx, key, string(bs), expiration)
 }
 
+// Publish 发布消息
+func Publish(ctx context.Context, channel string, msg interface{}) error {
+	data, err := json.Marshal(msg)
+	if err != nil {
+		return err
+	}
+	return Rdb.Publish(ctx, channel, data).Err()
+}
+
+// Subscribe 订阅频道
+func Subscribe(ctx context.Context, channels ...string) *redis.PubSub {
+	return Rdb.Subscribe(ctx, channels...)
+}
+
 // Exists 判断是否存在
 func Exists(ctx context.Context, key string) (bool, error) {
 	result, err := Rdb.Exists(ctx, key).Result()
