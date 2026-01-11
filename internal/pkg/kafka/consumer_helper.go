@@ -3,9 +3,11 @@ package kafka
 import (
 	"Cornerstone/internal/api/config"
 	"Cornerstone/internal/pkg/logger"
+	"Cornerstone/internal/pkg/redis"
 	"context"
 	"errors"
 	log "log/slog"
+	"strconv"
 	"sync"
 	"time"
 
@@ -15,6 +17,15 @@ import (
 )
 
 type LogicFunc func(ctx context.Context, msg *sarama.ConsumerMessage) error
+
+// ActionParams 定义消费者执行动作的统一参数
+type ActionParams struct {
+	TargetID       uint64
+	CountKeyPrefix string
+	DirtyKey       string
+	IsIncrement    bool
+	NotifyFunc     func()
+}
 
 // pullMessageBatch 拉取一批消息并执行业务逻辑
 func pullMessageBatch(session sarama.ConsumerGroupSession, claim sarama.ConsumerGroupClaim, logic LogicFunc) error {
@@ -132,4 +143,25 @@ func ToCanalMessage(msg *sarama.ConsumerMessage, tableName string) (*CanalMessag
 	}
 
 	return &canalMsg, nil
+}
+
+// ExecAction 提取出的通用执行逻辑：Redis 计数 + 脏标记 + 通知触发
+func ExecAction(ctx context.Context, p ActionParams) {
+	// Redis 计数更新
+	countKey := p.CountKeyPrefix + strconv.FormatUint(p.TargetID, 10)
+	if p.IsIncrement {
+		_ = redis.Incr(ctx, countKey)
+	} else {
+		_ = redis.Decr(ctx, countKey)
+	}
+
+	// 标记为 Dirty
+	if p.DirtyKey != "" {
+		_ = redis.SAdd(ctx, p.DirtyKey, p.TargetID)
+	}
+
+	// 执行业务通知
+	if p.NotifyFunc != nil {
+		p.NotifyFunc()
+	}
 }

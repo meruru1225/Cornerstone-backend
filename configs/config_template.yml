@@ -103,3 +103,19 @@ kafka_post_consumer:
 kafka_comment_consumer:
   topic: "{{KAFKA_COMMENT_TOPIC}}"
   group_id: "{{KAFKA_COMMENT_GROUP_ID}}"
+
+kafka_like_consumer:
+  topic: "{{KAFKA_LIKE_TOPIC}}"
+  group_id: "{{KAFKA_LIKE_GROUP_ID}}"
+
+kafka_collection_consumer:
+  topic: "{{KAFKA_COLLECTION_TOPIC}}"
+  group_id: "{{KAFKA_COLLECTION_GROUP_ID}}"
+
+kafka_comment_like_consumer:
+  topic: "{{KAFKA_COMMENT_LIKE_TOPIC}}"
+  group_id: "{{KAFKA_COMMENT_LIKE_GROUP_ID}}"
+
+kafka_view_consumer:
+  topic: "{{KAFKA_VIEW_TOPIC}}"
+  group_id: "{{KAFKA_VIEW_GROUP_ID}}

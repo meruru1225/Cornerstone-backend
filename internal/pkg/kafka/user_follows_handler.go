@@ -2,6 +2,7 @@ package kafka
 
 import (
 	"Cornerstone/internal/pkg/consts"
+	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/redis"
 	"context"
 	log "log/slog"
@@ -13,10 +14,13 @@ import (
 )
 
 type UserFollowsHandler struct {
+	sysBoxRepo mongo.SysBoxRepo
 }
 
-func NewUserFollowsConsumer() *UserFollowsHandler {
-	return &UserFollowsHandler{}
+func NewUserFollowsConsumer(sysBoxRepo mongo.SysBoxRepo) *UserFollowsHandler {
+	return &UserFollowsHandler{
+		sysBoxRepo: sysBoxRepo,
+	}
 }
 
 func (s *UserFollowsHandler) Setup(sarama.ConsumerGroupSession) error {
@@ -69,6 +73,8 @@ func (s *UserFollowsHandler) logic(ctx context.Context, msg *sarama.ConsumerMess
 			pipe.ZRemRangeByRank(ctx, fngKey, 0, -1001)
 			pipe.Incr(ctx, fdrCountKey)
 			pipe.Incr(ctx, fngCountKey)
+
+			s.sendFollowNotification(followerID, followingID)
 		} else if canalMsg.Type == DELETE {
 			pipe.ZRem(ctx, fdrKey, followerID)
 			pipe.ZRem(ctx, fngKey, followingID)
@@ -88,4 +94,27 @@ func (s *UserFollowsHandler) logic(ctx context.Context, msg *sarama.ConsumerMess
 	}
 
 	return nil
+}
+
+// sendFollowNotification 封装新增粉丝通知逻辑
+func (s *UserFollowsHandler) sendFollowNotification(followerID, followingID uint64) {
+	if followerID == followingID {
+		return
+	}
+
+	notification := &mongo.SysBoxModel{
+		ReceiverID: followingID,
+		SenderID:   followerID,
+		Type:       5, // 5-被关注
+		TargetID:   followerID,
+		Content:    "关注了你",
+		IsRead:     false,
+		CreatedAt:  time.Now(),
+	}
+
+	go func() {
+		if err := s.sysBoxRepo.CreateNotification(context.Background(), notification); err != nil {
+			log.Error("failed to create follow notification", "follower", followerID, "following", followingID, "err", err)
+		}
+	}()
 }

@@ -161,6 +161,15 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.POST("/message/read", group.IMHandler.MarkAsRead)
 			}
 		}
+
+		sysbox := apiGroup.Group("/sysbox")
+		sysbox.Use(middleware.AuthMiddleware())
+		{
+			sysbox.GET("/list", group.SysBoxHandler.GetNotificationList)
+			sysbox.GET("/unread", group.SysBoxHandler.GetUnreadCount)
+			sysbox.POST("/read", group.SysBoxHandler.MarkRead)
+			sysbox.POST("/read/all", group.SysBoxHandler.MarkAllRead)
+		}
 	}
 
 	return r

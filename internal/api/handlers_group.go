@@ -14,4 +14,5 @@ type HandlersGroup struct {
 	UserContentMetricHandler *handler.UserContentMetricHandler
 	IMHandler                *handler.IMHandler
 	WSHandler                *handler.WsHandler
+	SysBoxHandler            *handler.SysBoxHandler
 }

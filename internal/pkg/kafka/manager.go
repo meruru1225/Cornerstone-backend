@@ -3,6 +3,7 @@ package kafka
 import (
 	"Cornerstone/internal/api/config"
 	"Cornerstone/internal/pkg/es"
+	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/processor"
 	"Cornerstone/internal/repository"
 	"context"
@@ -27,148 +28,159 @@ type ConsumerManager struct {
 
 	commentsConsumer sarama.ConsumerGroup
 	commentsHandler  sarama.ConsumerGroupHandler
+
+	likesConsumer sarama.ConsumerGroup
+	likesHandler  sarama.ConsumerGroupHandler
+
+	collectionsConsumer sarama.ConsumerGroup
+	collectionsHandler  sarama.ConsumerGroupHandler
+
+	viewsConsumer sarama.ConsumerGroup
+	viewsHandler  sarama.ConsumerGroupHandler
+
+	commentLikesConsumer sarama.ConsumerGroup
+	commentLikesHandler  sarama.ConsumerGroupHandler
 }
 
-// NewConsumerManager 构造函数
+// NewConsumerManager 创建 Kafka 消费者管理器
 func NewConsumerManager(
 	cfg *config.Config,
 	contentProcessor processor.ContentLLMProcessor,
 	userESRepo es.UserRepo,
 	postESRepo es.PostRepo,
+	sysBoxRepo mongo.SysBoxRepo,
 	userDBRepo repository.UserRepo,
 	actionDBRepo repository.PostActionRepo,
 	userFollowDBRepo repository.UserFollowRepo,
 	postDBRepo repository.PostRepo,
 ) (*ConsumerManager, error) {
 	saramaCfg := newSaramaConfig(cfg.Kafka)
+	m := &ConsumerManager{}
+	var err error
 
-	usersConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserConsumer.GroupID, saramaCfg)
+	// 错误回滚闭包：一旦后续初始化失败，关闭所有已打开的资源
+	rollback := func() {
+		m.Close()
+	}
+
+	m.usersConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserConsumer.GroupID, saramaCfg)
 	if err != nil {
 		return nil, err
 	}
-	usersHandler := NewUserHandler(userESRepo)
+	m.usersHandler = NewUserHandler(userESRepo)
 
-	userDetailConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserDetailConsumer.GroupID, saramaCfg)
+	m.userDetailConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserDetailConsumer.GroupID, saramaCfg)
 	if err != nil {
+		rollback()
 		return nil, err
 	}
-	userDetailHandler := NewUserDetailHandler(userFollowDBRepo, userESRepo)
+	m.userDetailHandler = NewUserDetailHandler(userFollowDBRepo, userESRepo)
 
-	userFollowsConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserFollowsConsumer.GroupID, saramaCfg)
+	m.userFollowsConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserFollowsConsumer.GroupID, saramaCfg)
 	if err != nil {
+		rollback()
 		return nil, err
 	}
-	userFollowsHandler := NewUserFollowsConsumer()
+	m.userFollowsHandler = NewUserFollowsConsumer(sysBoxRepo)
 
-	postsConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaPostConsumer.GroupID, saramaCfg)
+	m.postConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaPostConsumer.GroupID, saramaCfg)
 	if err != nil {
+		rollback()
 		return nil, err
 	}
-	postsHandler := NewPostsHandler(userDBRepo, postDBRepo, postESRepo, contentProcessor)
+	m.postHandler = NewPostsHandler(userDBRepo, postDBRepo, postESRepo, contentProcessor)
 
-	commentsConsumer, err := sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaCommentConsumer.GroupID, saramaCfg)
+	m.commentsConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaCommentConsumer.GroupID, saramaCfg)
 	if err != nil {
+		rollback()
 		return nil, err
 	}
-	commentsHandler := NewCommentsHandler(actionDBRepo, contentProcessor)
+	m.commentsHandler = NewCommentsHandler(actionDBRepo, postDBRepo, sysBoxRepo, contentProcessor)
 
-	return &ConsumerManager{
-		usersConsumer:       usersConsumer,
-		usersHandler:        usersHandler,
-		userDetailConsumer:  userDetailConsumer,
-		userDetailHandler:   userDetailHandler,
-		userFollowsConsumer: userFollowsConsumer,
-		userFollowsHandler:  userFollowsHandler,
-		postConsumer:        postsConsumer,
-		postHandler:         postsHandler,
-		commentsConsumer:    commentsConsumer,
-		commentsHandler:     commentsHandler,
-	}, nil
+	m.likesConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaLikeConsumer.GroupID, saramaCfg)
+	if err != nil {
+		rollback()
+		return nil, err
+	}
+	m.likesHandler = NewLikesHandler(postDBRepo, sysBoxRepo)
+
+	m.collectionsConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaCollectionConsumer.GroupID, saramaCfg)
+	if err != nil {
+		rollback()
+		return nil, err
+	}
+	m.collectionsHandler = NewCollectionsHandler(postDBRepo, sysBoxRepo)
+
+	m.viewsConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaViewConsumer.GroupID, saramaCfg)
+	if err != nil {
+		rollback()
+		return nil, err
+	}
+	m.viewsHandler = NewViewsHandler()
+
+	m.commentLikesConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaCommentLikeConsumer.GroupID, saramaCfg)
+	if err != nil {
+		rollback()
+		return nil, err
+	}
+	m.commentLikesHandler = NewCommentLikesHandler(actionDBRepo, sysBoxRepo)
+
+	return m, nil
 }
 
-// Start 启动所有消费者
+// Start 启动所有消费者（已修复 Topic 错位问题）
 func (m *ConsumerManager) Start(ctx context.Context, cfg *config.Config) error {
-	// 启动 User Consumer
-	go func() {
-		topic := cfg.KafkaUserConsumer.Topic
-		log.Info("User consumer started", "topic", topic)
-		for {
-			if err := m.userDetailConsumer.Consume(ctx, []string{topic}, m.userDetailHandler); err != nil {
-				log.Error("Error from consumer", "err", err)
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
-
-	// 启动 User Detail Consumer
-	go func() {
-		topic := cfg.KafkaUserDetailConsumer.Topic
-		log.Info("User Detail consumer started", "topic", topic)
-		for {
-			if err := m.usersConsumer.Consume(ctx, []string{topic}, m.usersHandler); err != nil {
-				log.Error("Error from consumer", "err", err)
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
-
-	// 启动 User Follows Consumer
-	go func() {
-		topic := cfg.KafkaUserFollowsConsumer.Topic
-		log.Info("User Follows consumer started", "topic", topic)
-		for {
-			if err := m.userFollowsConsumer.Consume(ctx, []string{topic}, m.userFollowsHandler); err != nil {
-				log.Error("Error from consumer", "err", err)
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
-
-	// 启动 Post Consumer
-	go func() {
-		topic := cfg.KafkaPostConsumer.Topic
-		log.Info("Post consumer started", "topic", topic)
-		for {
-			if err := m.postConsumer.Consume(ctx, []string{topic}, m.postHandler); err != nil {
-				log.Error("Error from consumer", "err", err)
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
-
-	// 启动 Comment Consumer
-	go func() {
-		topic := cfg.KafkaCommentConsumer.Topic
-		log.Info("Comment consumer started", "topic", topic)
-		for {
-			if err := m.commentsConsumer.Consume(ctx, []string{topic}, m.commentsHandler); err != nil {
-				log.Error("Error from consumer", "err", err)
-			}
-			if ctx.Err() != nil {
-				return
-			}
-		}
-	}()
+	// 启动各模块消费者协程
+	go m.runConsumer(ctx, m.usersConsumer, cfg.KafkaUserConsumer.Topic, m.usersHandler, "User")
+	go m.runConsumer(ctx, m.userDetailConsumer, cfg.KafkaUserDetailConsumer.Topic, m.userDetailHandler, "User Detail")
+	go m.runConsumer(ctx, m.userFollowsConsumer, cfg.KafkaUserFollowsConsumer.Topic, m.userFollowsHandler, "User Follows")
+	go m.runConsumer(ctx, m.postConsumer, cfg.KafkaPostConsumer.Topic, m.postHandler, "Post")
+	go m.runConsumer(ctx, m.commentsConsumer, cfg.KafkaCommentConsumer.Topic, m.commentsHandler, "Comment")
+	go m.runConsumer(ctx, m.likesConsumer, cfg.KafkaLikeConsumer.Topic, m.likesHandler, "Like")
+	go m.runConsumer(ctx, m.collectionsConsumer, cfg.KafkaCollectionConsumer.Topic, m.collectionsHandler, "Collection")
+	go m.runConsumer(ctx, m.viewsConsumer, cfg.KafkaViewConsumer.Topic, m.viewsHandler, "View")
+	go m.runConsumer(ctx, m.commentLikesConsumer, cfg.KafkaCommentLikeConsumer.Topic, m.commentLikesHandler, "Comment Like")
 
 	<-ctx.Done()
 	log.Info("Kafka Manager shutting down...")
 
-	err := m.userDetailConsumer.Close()
-	if err != nil {
-		log.Error("Failed to close detail consumer", "err", err)
-	}
-	err = m.postConsumer.Close()
-	if err != nil {
-		log.Error("Failed to close follows consumer", "err", err)
-	}
-
+	m.Close() // 优雅退出
 	return nil
+}
+
+// runConsumer 封装通用的消费运行逻辑
+func (m *ConsumerManager) runConsumer(ctx context.Context, group sarama.ConsumerGroup, topic string, handler sarama.ConsumerGroupHandler, name string) {
+	log.Info(name+" consumer started", "topic", topic)
+	for {
+		if err := group.Consume(ctx, []string{topic}, handler); err != nil {
+			log.Error(name+" consumer loop error", "err", err)
+		}
+		if ctx.Err() != nil {
+			return
+		}
+	}
+}
+
+// Close 统一关闭所有消费者组，释放资源
+func (m *ConsumerManager) Close() {
+	m.safeClose(m.usersConsumer, "Users")
+	m.safeClose(m.userDetailConsumer, "User Detail")
+	m.safeClose(m.userFollowsConsumer, "User Follows")
+	m.safeClose(m.postConsumer, "Post")
+	m.safeClose(m.commentsConsumer, "Comments")
+	m.safeClose(m.likesConsumer, "Likes")
+	m.safeClose(m.collectionsConsumer, "Collections")
+	m.safeClose(m.viewsConsumer, "Views")
+	m.safeClose(m.commentLikesConsumer, "Comment Likes")
+}
+
+// safeClose 安全关闭辅助方法
+func (m *ConsumerManager) safeClose(group sarama.ConsumerGroup, name string) {
+	if group != nil {
+		if err := group.Close(); err != nil {
+			log.Error("Failed to close consumer", "name", name, "err", err)
+		} else {
+			log.Info("Consumer group closed", "name", name)
+		}
+	}
 }

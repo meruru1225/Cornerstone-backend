@@ -45,6 +45,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 
 	// Mongo 实例
 	messageMongoRepo := mongo.NewMessageRepo(mongoConn)
+	sysBoxRepo := mongo.NewSysBoxRepo(mongoConn)
 
 	// ES 实例
 	userESRepo := es.NewUserRepo()
@@ -68,6 +69,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	postActionService := service.NewPostActionService(postActionRepo, postRepo, userRepo)
 	postMetricsService := service.NewPostMetricService(postMetricsRepo, postRepo)
 	IMService := service.NewIMService(conversationRepo, messageMongoRepo)
+	sysBoxService := service.NewSysBoxService(sysBoxRepo, userRepo)
 
 	handlers := &api.HandlersGroup{
 		AgentHandler:             handler.NewAgentHandler(agent),
@@ -80,6 +82,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 		UserContentMetricHandler: handler.NewUserContentMetricHandler(userContentMetricsService),
 		IMHandler:                handler.NewIMHandler(IMService),
 		WSHandler:                handler.NewWsHandler(IMService),
+		SysBoxHandler:            handler.NewSysBoxHandler(sysBoxService),
 	}
 
 	router := api.SetupRouter(handlers)
@@ -92,7 +95,8 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	cronMgr := cron.NewCronManager(userMetricsJob, postMetricsJob, userInterestJOb, postCommentJob)
 
 	// Kafka 消费者管理
-	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, userRepo, postActionRepo, userFollowRepo, postRepo)
+	kafkaMgr, err := kafka.NewConsumerManager(cfg, contentProcesser, userESRepo, postESRepo, sysBoxRepo,
+		userRepo, postActionRepo, userFollowRepo, postRepo)
 	if err != nil {
 		return nil, err
 	}

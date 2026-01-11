@@ -21,6 +21,7 @@ const (
 	PostCommentLikeKey          = "post:comment:like:"
 	PostCommentLikeDirtyKey     = "post:comment:like:dirty"
 	PostViewKey                 = "post:view:"
+	PostReportKey               = "post:report:"
 	PostMetrics7DaysKey         = "post:metrics:7days:"
 	PostMetrics30DaysKey        = "post:metrics:30days:"
 	UserContentMetrics7DaysKey  = "user_content:metrics:7days:"

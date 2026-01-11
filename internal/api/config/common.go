@@ -2,22 +2,26 @@ package config
 
 // Config 配置主体
 type Config struct {
-	Server                   ServerConfig            `mapstructure:"server"`
-	DB                       DBConfig                `mapstructure:"database"`
-	Redis                    RedisConfig             `mapstructure:"redis"`
-	Mongo                    MongoConfig             `mapstructure:"mongo"`
-	SMS                      SMSConfig               `mapstructure:"sms"`
-	LLM                      LLMConfig               `mapstructure:"llm"`
-	MinIO                    MinIOConfig             `mapstructure:"minio"`
-	Elastic                  ElasticConfig           `mapstructure:"elastic"`
-	Logstash                 LogstashConfig          `mapstructure:"logstash"`
-	LibPath                  LibPathConfig           `mapstructure:"lib_path"`
-	Kafka                    KafkaConfig             `mapstructure:"kafka"`
-	KafkaUserConsumer        KafkaUserConsumer       `mapstructure:"kafka_user_consumer"`
-	KafkaUserDetailConsumer  KafkaUserDetailConsumer `mapstructure:"kafka_user_detail_consumer"`
-	KafkaUserFollowsConsumer KafkaUserFollowConsumer `mapstructure:"kafka_user_follow_consumer"`
-	KafkaPostConsumer        KafkaPostConsumer       `mapstructure:"kafka_post_consumer"`
-	KafkaCommentConsumer     KafkaCommentConsumer    `mapstructure:"kafka_comment_consumer"`
+	Server                   ServerConfig   `mapstructure:"server"`
+	DB                       DBConfig       `mapstructure:"database"`
+	Redis                    RedisConfig    `mapstructure:"redis"`
+	Mongo                    MongoConfig    `mapstructure:"mongo"`
+	SMS                      SMSConfig      `mapstructure:"sms"`
+	LLM                      LLMConfig      `mapstructure:"llm"`
+	MinIO                    MinIOConfig    `mapstructure:"minio"`
+	Elastic                  ElasticConfig  `mapstructure:"elastic"`
+	Logstash                 LogstashConfig `mapstructure:"logstash"`
+	LibPath                  LibPathConfig  `mapstructure:"lib_path"`
+	Kafka                    KafkaConfig    `mapstructure:"kafka"`
+	KafkaUserConsumer        KafkaConsumer  `mapstructure:"kafka_user_consumer"`
+	KafkaUserDetailConsumer  KafkaConsumer  `mapstructure:"kafka_user_detail_consumer"`
+	KafkaUserFollowsConsumer KafkaConsumer  `mapstructure:"kafka_user_follow_consumer"`
+	KafkaPostConsumer        KafkaConsumer  `mapstructure:"kafka_post_consumer"`
+	KafkaCommentConsumer     KafkaConsumer  `mapstructure:"kafka_comment_consumer"`
+	KafkaLikeConsumer        KafkaConsumer  `mapstructure:"kafka_like_consumer"`
+	KafkaCollectionConsumer  KafkaConsumer  `mapstructure:"kafka_collection_consumer"`
+	KafkaCommentLikeConsumer KafkaConsumer  `mapstructure:"kafka_comment_like_consumer"`
+	KafkaViewConsumer        KafkaConsumer  `mapstructure:"kafka_view_consumer"`
 }
 
 // ServerConfig Server配置
@@ -134,27 +138,7 @@ type ConsumerConfig struct {
 	RetryInterval     int `mapstructure:"retry_interval"`
 }
 
-type KafkaUserConsumer struct {
-	Topic   string `mapstructure:"topic"`
-	GroupID string `mapstructure:"group_id"`
-}
-
-type KafkaUserDetailConsumer struct {
-	Topic   string `mapstructure:"topic"`
-	GroupID string `mapstructure:"group_id"`
-}
-
-type KafkaUserFollowConsumer struct {
-	Topic   string `mapstructure:"topic"`
-	GroupID string `mapstructure:"group_id"`
-}
-
-type KafkaPostConsumer struct {
-	Topic   string `mapstructure:"topic"`
-	GroupID string `mapstructure:"group_id"`
-}
-
-type KafkaCommentConsumer struct {
+type KafkaConsumer struct {
 	Topic   string `mapstructure:"topic"`
 	GroupID string `mapstructure:"group_id"`
 }

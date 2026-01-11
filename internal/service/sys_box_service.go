@@ -1,0 +1,83 @@
+package service
+
+import (
+	"Cornerstone/internal/api/dto"
+	"Cornerstone/internal/pkg/mongo"
+	"Cornerstone/internal/repository"
+	"context"
+
+	"github.com/jinzhu/copier"
+)
+
+type SysBoxService interface {
+	GetNotificationList(ctx context.Context, userID uint64, page, pageSize int) ([]*dto.SysBoxDTO, error)
+	GetUnreadCount(ctx context.Context, userID uint64) (*dto.SysBoxUnreadDTO, error)
+	MarkRead(ctx context.Context, userID uint64, msgID string) error
+	MarkAllRead(ctx context.Context, userID uint64) error
+}
+
+type sysBoxServiceImpl struct {
+	sysBoxRepo mongo.SysBoxRepo
+	userRepo   repository.UserRepo
+}
+
+func NewSysBoxService(sysBox mongo.SysBoxRepo, user repository.UserRepo) SysBoxService {
+	return &sysBoxServiceImpl{
+		sysBoxRepo: sysBox,
+		userRepo:   user,
+	}
+}
+
+// GetNotificationList 获取通知列表并补全用户信息
+func (s *sysBoxServiceImpl) GetNotificationList(ctx context.Context, userID uint64, page, pageSize int) ([]*dto.SysBoxDTO, error) {
+	limit := int64(pageSize)
+	offset := int64((page - 1) * pageSize)
+
+	// 从 MongoDB 拉取原始数据
+	list, err := s.sysBoxRepo.GetNotificationList(ctx, userID, limit, offset)
+	if err != nil {
+		return nil, err
+	}
+
+	res := make([]*dto.SysBoxDTO, 0, len(list))
+	for _, m := range list {
+		d := &dto.SysBoxDTO{}
+		_ = copier.Copy(d, m)
+		d.ID = m.ID.Hex()
+		d.CreatedAt = m.CreatedAt.Format("2006-01-02 15:04:05")
+
+		// 补全发送者信息 (SenderID 为 0 代表系统发送)
+		if m.SenderID > 0 {
+			user, err := s.userRepo.GetUserHomeInfoById(ctx, m.SenderID)
+			if err == nil && user != nil {
+				d.SenderName = user.Nickname
+				d.AvatarURL = user.AvatarURL
+			}
+		} else {
+			d.SenderName = "系统通知"
+		}
+
+		res = append(res, d)
+	}
+
+	return res, nil
+}
+
+// GetUnreadCount 获取未读数
+func (s *sysBoxServiceImpl) GetUnreadCount(ctx context.Context, userID uint64) (*dto.SysBoxUnreadDTO, error) {
+	count, err := s.sysBoxRepo.GetUnreadCount(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	return &dto.SysBoxUnreadDTO{UnreadCount: count}, nil
+}
+
+// MarkRead 标记单条已读
+func (s *sysBoxServiceImpl) MarkRead(ctx context.Context, userID uint64, msgID string) error {
+	return s.sysBoxRepo.MarkAsRead(ctx, userID, msgID)
+}
+
+// MarkAllRead 一键已读
+func (s *sysBoxServiceImpl) MarkAllRead(ctx context.Context, userID uint64) error {
+	return s.sysBoxRepo.MarkAllAsRead(ctx, userID)
+}

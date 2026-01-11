@@ -2,26 +2,42 @@ package kafka
 
 import (
 	"Cornerstone/internal/model"
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/es"
 	"Cornerstone/internal/pkg/llm"
+	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/processor"
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
 	"sync/atomic"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/goccy/go-json"
 )
 
+const (
+	CommentStatusApproved int8 = 1
+)
+
 type CommentsHandler struct {
 	postActionRepo repository.PostActionRepo
+	postRepo       repository.PostRepo
+	sysBoxRepo     mongo.SysBoxRepo
 	processor      processor.ContentLLMProcessor
 }
 
-func NewCommentsHandler(repo repository.PostActionRepo, proc processor.ContentLLMProcessor) *CommentsHandler {
+func NewCommentsHandler(
+	actionRepo repository.PostActionRepo,
+	postRepo repository.PostRepo,
+	sysBoxRepo mongo.SysBoxRepo,
+	proc processor.ContentLLMProcessor,
+) *CommentsHandler {
 	return &CommentsHandler{
-		postActionRepo: repo,
+		postActionRepo: actionRepo,
+		postRepo:       postRepo,
+		sysBoxRepo:     sysBoxRepo,
 		processor:      proc,
 	}
 }
@@ -54,8 +70,7 @@ func (s *CommentsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage
 
 	if canalMsg.Type == UPDATE {
 		if s.isSoftDeleted(canalMsg) {
-			log.InfoContext(ctx, "comment soft deleted, skip audit", "id", s.getCommentID(canalMsg))
-			return nil
+			return s.handleDelete(ctx, canalMsg)
 		}
 		return nil
 	}
@@ -69,6 +84,7 @@ func (s *CommentsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage
 		return err
 	}
 
+	// 准备审核素材
 	mediaForAudit := make([]*es.PostMediaES, 0, len(commentModel.MediaInfo))
 	for _, m := range commentModel.MediaInfo {
 		mediaForAudit = append(mediaForAudit, &es.PostMediaES{
@@ -77,6 +93,7 @@ func (s *CommentsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage
 		})
 	}
 
+	// 执行 LLM 审核
 	res, err := s.processor.Process(ctx, "", commentModel.Content, mediaForAudit, true)
 	if err != nil {
 		log.ErrorContext(ctx, "comment processor execution failed", "id", commentModel.ID, "err", err)
@@ -85,13 +102,90 @@ func (s *CommentsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage
 
 	finalStatus := atomic.LoadInt32(&res.MaxStatus)
 
-	err = s.syncAuditStatus(ctx, commentModel.ID, int(finalStatus))
-	if err != nil {
-		log.ErrorContext(ctx, "failed to sync comment audit status", "id", commentModel.ID, "err", err)
-		return err
+	return s.handleAuditResult(ctx, commentModel, int(finalStatus))
+}
+
+// handleAuditResult 处理审核结果
+func (s *CommentsHandler) handleAuditResult(ctx context.Context, m *model.PostComment, status int) error {
+	pass := status != int(llm.ContentSafeDeny)
+	_ = s.postActionRepo.UpdateCommentStatus(ctx, m.ID, pass)
+
+	if pass {
+		ExecAction(ctx, ActionParams{
+			TargetID:       m.PostID,
+			CountKeyPrefix: consts.PostCommentKey,
+			DirtyKey:       consts.PostDirtyKey,
+			IsIncrement:    true,
+			NotifyFunc:     func() { s.sendCommentNotification(ctx, m) },
+		})
+	}
+	return nil
+}
+
+// sendCommentNotification 处理通知分发逻辑
+func (s *CommentsHandler) sendCommentNotification(ctx context.Context, m *model.PostComment) {
+	// 获取帖子信息以确定接收者
+	posts, err := s.postRepo.GetPostByIds(ctx, []uint64{m.PostID})
+	if err != nil || len(posts) == 0 {
+		return
+	}
+	post := posts[0]
+
+	// 确定通知接收者 (优先给被回复者，其次给帖子作者)
+	var receiverID uint64
+
+	if m.ReplyToUserID > 0 {
+		receiverID = m.ReplyToUserID
+	} else {
+		receiverID = post.UserID
 	}
 
-	log.InfoContext(ctx, "comment audit completed", "id", commentModel.ID, "status", finalStatus)
+	// 如果操作者是自己，则不发通知
+	if receiverID == m.UserID {
+		return
+	}
+
+	notification := &mongo.SysBoxModel{
+		ReceiverID: receiverID,
+		SenderID:   m.UserID,
+		Type:       3, // 3-评论
+		TargetID:   m.PostID,
+		Content:    m.Content,
+		Payload: map[string]any{
+			"comment_id": m.ID,
+			"post_title": post.Title,
+		},
+		IsRead:    false,
+		CreatedAt: time.Now(),
+	}
+
+	if err := s.sysBoxRepo.CreateNotification(ctx, notification); err != nil {
+		log.ErrorContext(ctx, "failed to create comment notification", "id", m.ID, "err", err)
+	}
+}
+
+// handleDelete 处理软删除逻辑
+func (s *CommentsHandler) handleDelete(ctx context.Context, msg *CanalMessage) error {
+	if len(msg.Data) == 0 {
+		return nil
+	}
+	row := msg.Data[0]
+	status := int8(StrToInt(row["status"]))
+
+	if status == CommentStatusApproved {
+		postID := StrToUint64(row["post_id"])
+		commentID := StrToUint64(row["id"])
+
+		ExecAction(ctx, ActionParams{
+			TargetID:       postID,
+			CountKeyPrefix: consts.PostCommentKey,
+			DirtyKey:       consts.PostDirtyKey,
+			IsIncrement:    false,
+		})
+
+		log.InfoContext(ctx, "comment deleted: DECR and DIRTY set", "id", commentID, "postID", postID)
+	}
+
 	return nil
 }
 
@@ -104,13 +198,6 @@ func (s *CommentsHandler) isSoftDeleted(msg *CanalMessage) bool {
 	return okOld && okNew && oldVal == "0" && newVal == "1"
 }
 
-func (s *CommentsHandler) getCommentID(msg *CanalMessage) uint64 {
-	if len(msg.Data) > 0 {
-		return StrToUint64(msg.Data[0]["id"])
-	}
-	return 0
-}
-
 func (s *CommentsHandler) parseToModel(msg *CanalMessage) (*model.PostComment, error) {
 	if len(msg.Data) == 0 {
 		return nil, nil
@@ -118,9 +205,12 @@ func (s *CommentsHandler) parseToModel(msg *CanalMessage) (*model.PostComment, e
 	row := msg.Data[0]
 
 	comment := &model.PostComment{
-		ID:      StrToUint64(row["id"]),
-		Content: StrToString(row["content"]),
-		Status:  int8(StrToInt(row["status"])),
+		ID:            StrToUint64(row["id"]),
+		PostID:        StrToUint64(row["post_id"]),
+		UserID:        StrToUint64(row["user_id"]),
+		ReplyToUserID: StrToUint64(row["reply_to_user_id"]), // 解析被回复人ID
+		Content:       StrToString(row["content"]),
+		Status:        int8(StrToInt(row["status"])),
 	}
 
 	if val, ok := row["media_info"]; ok && val != nil {
@@ -133,12 +223,4 @@ func (s *CommentsHandler) parseToModel(msg *CanalMessage) (*model.PostComment, e
 		}
 	}
 	return comment, nil
-}
-
-func (s *CommentsHandler) syncAuditStatus(ctx context.Context, id uint64, status int) error {
-	pass := true
-	if status == int(llm.ContentSafeDeny) {
-		pass = false
-	}
-	return s.postActionRepo.UpdateCommentStatus(ctx, id, pass)
 }

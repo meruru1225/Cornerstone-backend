@@ -9,17 +9,17 @@ import (
 
 type PostActionRepo interface {
 	CreateLike(ctx context.Context, like *model.Like) error
-	DeleteLike(ctx context.Context, userID, postID uint64) (int64, error)
+	DeleteLike(ctx context.Context, userID, postID uint64) error
 	CheckLikeExists(ctx context.Context, userID, postID uint64) (bool, error)
 	GetLikedPostIDs(ctx context.Context, userID uint64, limit, offset int) ([]uint64, error)
 
 	CreateCollection(ctx context.Context, collection *model.Collection) error
-	DeleteCollection(ctx context.Context, userID, postID uint64) (int64, error)
+	DeleteCollection(ctx context.Context, userID, postID uint64) error
 	CheckCollectionExists(ctx context.Context, userID, postID uint64) (bool, error)
 	GetCollectedPostIDs(ctx context.Context, userID uint64, limit, offset int) ([]uint64, error)
 
 	CreateComment(ctx context.Context, comment *model.PostComment) error
-	DeleteComment(ctx context.Context, commentID uint64) (int64, error)
+	DeleteComment(ctx context.Context, commentID uint64) error
 	UpdateCommentStatus(ctx context.Context, commentID uint64, status bool) error
 	UpdateCommentLikesCount(ctx context.Context, commentID uint64, count int) error
 	GetCommentByID(ctx context.Context, commentID uint64) (*model.PostComment, error)
@@ -28,7 +28,7 @@ type PostActionRepo interface {
 	GetSubCommentCountByRootID(ctx context.Context, rootID uint64) (int64, error)
 
 	CreateCommentLike(ctx context.Context, cl *model.CommentLike) error
-	DeleteCommentLike(ctx context.Context, userID, commentID uint64) (int64, error)
+	DeleteCommentLike(ctx context.Context, userID, commentID uint64) error
 	CheckCommentLikeExists(ctx context.Context, userID, commentID uint64) (bool, error)
 	GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error)
 
@@ -56,12 +56,10 @@ func (s *PostActionRepoImpl) CreateLike(ctx context.Context, like *model.Like) e
 	return s.db.WithContext(ctx).Create(like).Error
 }
 
-func (s *PostActionRepoImpl) DeleteLike(ctx context.Context, userID, postID uint64) (int64, error) {
-	result := s.db.WithContext(ctx).
+func (s *PostActionRepoImpl) DeleteLike(ctx context.Context, userID, postID uint64) error {
+	return s.db.WithContext(ctx).
 		Where("user_id = ? AND post_id = ?", userID, postID).
-		Delete(&model.Like{})
-
-	return result.RowsAffected, result.Error
+		Delete(&model.Like{}).Error
 }
 
 func (s *PostActionRepoImpl) CheckLikeExists(ctx context.Context, userID, postID uint64) (bool, error) {
@@ -86,12 +84,10 @@ func (s *PostActionRepoImpl) CreateCollection(ctx context.Context, collection *m
 	return s.db.WithContext(ctx).Create(collection).Error
 }
 
-func (s *PostActionRepoImpl) DeleteCollection(ctx context.Context, userID, postID uint64) (int64, error) {
-	result := s.db.WithContext(ctx).
+func (s *PostActionRepoImpl) DeleteCollection(ctx context.Context, userID, postID uint64) error {
+	return s.db.WithContext(ctx).
 		Where("user_id = ? AND post_id = ?", userID, postID).
-		Delete(&model.Collection{})
-
-	return result.RowsAffected, result.Error
+		Delete(&model.Collection{}).Error
 }
 
 func (s *PostActionRepoImpl) CheckCollectionExists(ctx context.Context, userID, postID uint64) (bool, error) {
@@ -116,12 +112,10 @@ func (s *PostActionRepoImpl) CreateComment(ctx context.Context, comment *model.P
 	return s.db.WithContext(ctx).Create(comment).Error
 }
 
-func (s *PostActionRepoImpl) DeleteComment(ctx context.Context, commentID uint64) (int64, error) {
-	result := s.db.WithContext(ctx).Model(&model.PostComment{}).
+func (s *PostActionRepoImpl) DeleteComment(ctx context.Context, commentID uint64) error {
+	return s.db.WithContext(ctx).Model(&model.PostComment{}).
 		Where("(id = ? OR root_id = ?) AND is_deleted = ?", commentID, commentID, false).
-		Update("is_deleted", true)
-
-	return result.RowsAffected, result.Error
+		Update("is_deleted", true).Error
 }
 
 func (s *PostActionRepoImpl) UpdateCommentStatus(ctx context.Context, commentID uint64, status bool) error {
@@ -179,12 +173,10 @@ func (s *PostActionRepoImpl) CreateCommentLike(ctx context.Context, cl *model.Co
 	return s.db.WithContext(ctx).Create(cl).Error
 }
 
-func (s *PostActionRepoImpl) DeleteCommentLike(ctx context.Context, userID, commentID uint64) (int64, error) {
-	result := s.db.WithContext(ctx).
+func (s *PostActionRepoImpl) DeleteCommentLike(ctx context.Context, userID, commentID uint64) error {
+	return s.db.WithContext(ctx).
 		Where("user_id = ? AND comment_id = ?", userID, commentID).
-		Delete(&model.CommentLike{})
-
-	return result.RowsAffected, result.Error
+		Delete(&model.CommentLike{}).Error
 }
 
 func (s *PostActionRepoImpl) CheckCommentLikeExists(ctx context.Context, userID, commentID uint64) (bool, error) {
