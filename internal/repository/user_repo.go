@@ -180,11 +180,10 @@ func (s *UserRepoImpl) DeleteUser(ctx context.Context, id uint64) error {
 	usernamePlaceholder := fmt.Sprintf("deleted_%d_%d", id, time.Now().Unix())
 
 	userUpdate := model.User{
-		IsDelete:      true,
-		Username:      &usernamePlaceholder,
-		Password:      nil,
-		Phone:         nil,
-		WechatUnionID: nil,
+		IsDelete: true,
+		Username: &usernamePlaceholder,
+		Password: nil,
+		Phone:    nil,
 	}
 
 	detailUpdate := model.UserDetail{
@@ -196,21 +195,17 @@ func (s *UserRepoImpl) DeleteUser(ctx context.Context, id uint64) error {
 	}
 
 	return s.db.WithContext(ctx).Transaction(func(tx *gorm.DB) error {
-		userFields := []string{"is_delete", "is_ban", "username", "password", "phone", "wechat_union_id", "updated_at"}
+		userFields := []string{"is_delete", "username", "password", "phone"}
 		if result := tx.Model(&model.User{}).Where("id = ?", id).Select(userFields).Updates(userUpdate); result.Error != nil {
 			return result.Error
 		}
-		detailFields := []string{"nickname", "region", "birthday", "updated_at"}
+
+		detailFields := []string{"nickname", "bio", "avatar_url", "region", "birthday"}
 		if result := tx.Model(&model.UserDetail{}).Where("user_id = ?", id).Select(detailFields).Updates(detailUpdate); result.Error != nil {
 			return result.Error
 		}
 
-		result := s.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Update("is_delete", true)
-		if result.Error != nil {
-			return result.Error
-		}
-
-		result = s.db.WithContext(ctx).Model(&model.UserRole{}).Where("user_id = ?", id).Delete(&model.UserRole{})
+		result := s.db.WithContext(ctx).Model(&model.UserRole{}).Where("user_id = ?", id).Delete(&model.UserRole{})
 		if result.Error != nil {
 			return result.Error
 		}

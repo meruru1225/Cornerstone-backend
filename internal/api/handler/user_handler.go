@@ -52,8 +52,21 @@ func (s *UserHandler) Register(c *gin.Context) {
 }
 
 func (s *UserHandler) SendSmsCode(c *gin.Context) {
-	phone := c.Query("phone")
-	err := s.smsSvc.SendSms(c.Request.Context(), phone)
+	type phoneDTO struct {
+		Phone string `json:"phone"`
+	}
+	var req phoneDTO
+	err := c.ShouldBind(&req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	phone := req.Phone
+	if !util.ValidatePhone(phone) {
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		return
+	}
+	err = s.smsSvc.SendSms(c.Request.Context(), phone)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -78,14 +91,23 @@ func (s *UserHandler) Login(c *gin.Context) {
 		return
 	}
 	response.Success(c, map[string]string{
-		"token":   token,
-		"user_id": strconv.FormatUint(c.GetUint64("user_id"), 10),
+		"token": token,
 	})
 }
 
 func (s *UserHandler) LoginByPhone(c *gin.Context) {
-	phone := c.Query("phone")
-	code := c.Query("code")
+	type phoneLoginDTO struct {
+		Phone string `json:"phone"`
+		Code  string `json:"code"`
+	}
+	var req phoneLoginDTO
+	err := c.ShouldBind(&req)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	phone := req.Phone
+	code := req.Code
 	token, err := s.smsSvc.CheckCode(c.Request.Context(), phone, code)
 	if err != nil {
 		response.Error(c, err)
@@ -106,9 +128,8 @@ func (s *UserHandler) LoginByPhone(c *gin.Context) {
 		isReg = true
 	}
 	response.Success(c, map[string]any{
-		"token":   token,
-		"user_id": strconv.FormatUint(c.GetUint64("user_id"), 10),
-		"is_reg":  isReg,
+		"token":  token,
+		"is_reg": isReg,
 	})
 }
 
@@ -273,7 +294,9 @@ func (s *UserHandler) UnbanUser(c *gin.Context) {
 
 func (s *UserHandler) CancelUser(c *gin.Context) {
 	userID := c.GetUint64("user_id")
-	err := s.userSvc.CancelUser(c.Request.Context(), userID)
+	token := c.Request.Header.Get("Authorization")
+	token = strings.Replace(token, "Bearer ", "", 1)
+	err := s.userSvc.CancelUser(c.Request.Context(), userID, token)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -331,7 +354,7 @@ func (s *UserHandler) DeleteUserRole(c *gin.Context) {
 }
 
 func (s *UserHandler) GetHomeInfo(c *gin.Context) {
-	query := c.Query("user_id")
+	query := c.Param("user_id")
 	userID, err := strconv.ParseUint(query, 10, 64)
 	user, err := s.userSvc.GetUserHomeInfoById(c.Request.Context(), userID)
 	if err != nil {
@@ -342,7 +365,7 @@ func (s *UserHandler) GetHomeInfo(c *gin.Context) {
 }
 
 func (s *UserHandler) GetUserSimpleInfoById(c *gin.Context) {
-	query := c.Query("user_id")
+	query := c.Param("user_id")
 	userID, err := strconv.ParseUint(query, 10, 64)
 	user, err := s.userSvc.GetUserSimpleInfoByIds(c.Request.Context(), []uint64{userID})
 	if err != nil {

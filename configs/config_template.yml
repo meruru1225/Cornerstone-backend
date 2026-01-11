@@ -47,6 +47,7 @@ minio:
   main_bucket: "{{MINIO_BUCKET}}"
   temp_bucket: "{{MINIO_BUCKET}}"
   internal_use_ssl: false
+  use_external: false
 
 elastic:
   address: "{{ELASTIC_ADDRESS}}"

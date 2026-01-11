@@ -2,6 +2,7 @@ package response
 
 import (
 	"Cornerstone/internal/api/dto"
+	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/service"
 	"errors"
 	log "log/slog"
@@ -45,6 +46,12 @@ func Error(c *gin.Context, err error) {
 	var ve validator.ValidationErrors
 	if errors.As(err, &ve) {
 		Fail(c, BadRequest, "参数错误")
+		return
+	}
+
+	var vew *util.ValidationErrorWrapper
+	if errors.As(err, &vew) {
+		Fail(c, BadRequest, vew.Message)
 		return
 	}
 

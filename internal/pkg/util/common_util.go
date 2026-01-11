@@ -61,3 +61,10 @@ func StrSliceToUInt64Slice(strSlice []string) ([]uint64, error) {
 func GetMidnight(t time.Time) time.Time {
 	return time.Date(t.Year(), t.Month(), t.Day(), 0, 0, 0, 0, t.Location())
 }
+
+// ValidatePhone 验证手机号码格式
+func ValidatePhone(phone string) bool {
+	reg := `^1[3-9]\d{9}$`
+	rgx := regexp.MustCompile(reg)
+	return rgx.MatchString(phone)
+}

@@ -43,14 +43,14 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 		{
 			// 无需登录即可访问的接口
 			userGroup.POST("/login", group.UserHandler.Login)
-			userGroup.POST("/loginByPhone", group.UserHandler.LoginByPhone)
+			userGroup.POST("/login/phone", group.UserHandler.LoginByPhone)
 			userGroup.POST("/register", group.UserHandler.Register)
-			userGroup.GET("/sendSmsCode", group.UserHandler.SendSmsCode)
-			userGroup.PUT("/forgetPassword", group.UserHandler.ForgetPassword)
-			userGroup.GET("/homeInfo", group.UserHandler.GetHomeInfo)
-			userGroup.GET("/simpleInfo", group.UserHandler.GetUserSimpleInfoById)
-			userGroup.GET("/simpleInfos", group.UserHandler.GetUserSimpleInfoByIds)
-			userGroup.GET("/searchUser", group.UserHandler.SearchUser)
+			userGroup.POST("/sms/send", group.UserHandler.SendSmsCode)
+			userGroup.PUT("/password/forget", group.UserHandler.ForgetPassword)
+			userGroup.GET("/:user_id/home", group.UserHandler.GetHomeInfo)
+			userGroup.GET("/:user_id/simple", group.UserHandler.GetUserSimpleInfoById)
+			userGroup.GET("/batch/simple", group.UserHandler.GetUserSimpleInfoByIds)
+			userGroup.GET("/search", group.UserHandler.SearchUser)
 
 			authGroup := userGroup.Group("")
 			authGroup.Use(middleware.AuthMiddleware())
@@ -62,7 +62,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.PUT("/username", group.UserHandler.ChangeUsername)
 				authGroup.PUT("/phone", group.UserHandler.ChangePhone)
 				authGroup.POST("/avatar", group.UserHandler.UploadAvatar)
-				authGroup.POST("/cancelUser", group.UserHandler.CancelUser)
+				authGroup.POST("/cancel", group.UserHandler.CancelUser)
 			}
 
 			// 需要登录 & 拥有 admin 角色
@@ -71,9 +71,9 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			{
 				adminGroup.POST("/ban", group.UserHandler.BanUser)
 				adminGroup.POST("/unban", group.UserHandler.UnbanUser)
-				adminGroup.GET("/userByCondition", group.UserHandler.GetUserByCondition)
-				adminGroup.POST("/userRole", group.UserHandler.AddUserRole)
-				adminGroup.DELETE("/userRole", group.UserHandler.DeleteUserRole)
+				adminGroup.GET("/condition", group.UserHandler.GetUserByCondition)
+				adminGroup.POST("/role", group.UserHandler.AddUserRole)
+				adminGroup.DELETE("/role", group.UserHandler.DeleteUserRole)
 			}
 		}
 

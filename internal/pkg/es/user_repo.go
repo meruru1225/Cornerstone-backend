@@ -13,6 +13,7 @@ import (
 
 type UserRepo interface {
 	SearchUser(ctx context.Context, keyword string, from, size int) ([]*UserES, int64, error)
+	Exist(ctx context.Context, id uint64) (bool, error)
 	IndexUser(ctx context.Context, user *UserES, version int64) error
 	DeleteUser(ctx context.Context, id uint64) error
 }
@@ -58,6 +59,15 @@ func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, siz
 	}
 
 	return users, total, nil
+}
+
+func (s *UserRepoImpl) Exist(ctx context.Context, id uint64) (bool, error) {
+	docID := strconv.FormatUint(id, 10)
+	res, err := Client.Exists(UserIndex, docID).Do(ctx)
+	if err != nil {
+		return false, err
+	}
+	return res, nil
 }
 
 func (s *UserRepoImpl) IndexUser(ctx context.Context, user *UserES, version int64) error {

@@ -36,7 +36,7 @@ type UserService interface {
 	UpdateAvatar(ctx context.Context, id uint64, objectName string) error
 	BanUser(ctx context.Context, id uint64) error
 	UnBanUser(ctx context.Context, id uint64) error
-	CancelUser(ctx context.Context, id uint64) error
+	CancelUser(ctx context.Context, id uint64, token string) error
 	SearchUser(ctx context.Context, keyword string, page, pageSize int) ([]*dto.UserDTO, error)
 }
 
@@ -387,9 +387,11 @@ func (s *UserServiceImpl) UpdatePhone(ctx context.Context, id uint64, dto *dto.C
 	if user == nil {
 		return ErrUserNotFound
 	}
-	err = s.checkPhoneSmsCode(ctx, user.Phone, *dto.Token)
-	if err != nil {
-		return err
+	if user.Phone != nil {
+		err = s.checkPhoneSmsCode(ctx, dto.NewPhone, *dto.Token)
+		if err != nil {
+			return err
+		}
 	}
 	user.Phone = dto.NewPhone
 	return s.userRepo.UpdateUser(ctx, user)
@@ -460,7 +462,7 @@ func (s *UserServiceImpl) UnBanUser(ctx context.Context, id uint64) error {
 	return s.changeUserIsBanStatus(ctx, id, false)
 }
 
-func (s *UserServiceImpl) CancelUser(ctx context.Context, id uint64) error {
+func (s *UserServiceImpl) CancelUser(ctx context.Context, id uint64, token string) error {
 	user, err := s.userRepo.GetUserById(ctx, id)
 	if err != nil {
 		return err
@@ -468,7 +470,18 @@ func (s *UserServiceImpl) CancelUser(ctx context.Context, id uint64) error {
 	if user == nil {
 		return ErrUserNotFound
 	}
-	return s.userRepo.DeleteUser(ctx, id)
+	oldAvatar := user.UserDetail.AvatarURL
+	err = s.userRepo.DeleteUser(ctx, id)
+	if err != nil {
+		return err
+	}
+	if oldAvatar != "" {
+		_ = minio.DeleteFile(ctx, oldAvatar)
+	}
+	idStr := strconv.FormatUint(id, 10)
+	_ = redis.DeleteKey(ctx, consts.UserHomeInfoKey+idStr)
+	_ = redis.DeleteKey(ctx, consts.UserSimpleInfoKey+idStr)
+	return s.Logout(ctx, token)
 }
 
 func (s *UserServiceImpl) SearchUser(ctx context.Context, keyword string, page, pageSize int) ([]*dto.UserDTO, error) {

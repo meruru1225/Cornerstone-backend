@@ -125,7 +125,7 @@ func (s *contentLLMProcessorImpl) collectAllFeatures(ctx context.Context, media 
 			switch typePrefix {
 			case consts.MimePrefixImage:
 				res.Lock()
-				res.allPendingUrls = append(res.allPendingUrls, minio.GetPublicURL(m.URL))
+				res.allPendingUrls = append(res.allPendingUrls, minio.GetForcePublicURL(m.URL))
 				res.Unlock()
 				return nil
 			case consts.MimePrefixVideo:

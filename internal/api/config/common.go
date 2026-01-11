@@ -85,6 +85,7 @@ type MinIOConfig struct {
 	MainBucket       string `mapstructure:"main_bucket"`
 	TempBucket       string `mapstructure:"temp_bucket"`
 	InternalUseSSL   bool   `mapstructure:"internal_use_ssl"`
+	UseExternal      bool   `mapstructure:"use_external"`
 }
 
 // ElasticConfig Elastic配置

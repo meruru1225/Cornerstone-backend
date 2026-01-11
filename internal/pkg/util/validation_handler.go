@@ -8,6 +8,15 @@ import (
 	"github.com/go-playground/validator/v10"
 )
 
+type ValidationErrorWrapper struct {
+	Message string
+	Raw     validator.ValidationErrors
+}
+
+func (e *ValidationErrorWrapper) Error() string {
+	return e.Message
+}
+
 var validate *validator.Validate
 
 func init() {
@@ -19,10 +28,11 @@ func ValidateDTO(dto any) error {
 		var vErrs validator.ValidationErrors
 		if errors.As(err, &vErrs) {
 			firstError := vErrs[0]
-			msg := fmt.Sprintf("字段 [%s] 校验失败，规则 [%s]",
-				firstError.Field(),
-				firstError.Tag())
-			return errors.New(msg)
+			msg := fmt.Sprintf("参数[%s]错误", firstError.Field())
+			return &ValidationErrorWrapper{
+				Message: msg,
+				Raw:     vErrs,
+			}
 		}
 	}
 	return nil
@@ -30,7 +40,7 @@ func ValidateDTO(dto any) error {
 
 func ValidateRegDTO(dto *dto.RegisterDTO) bool {
 	if dto.Username != nil && dto.Password != nil {
-		if len(*dto.Username) < 6 || len(*dto.Password) < 6 {
+		if len(*dto.Username) < 4 || len(*dto.Password) < 6 {
 			return false
 		}
 		if len(*dto.Username) > 20 || len(*dto.Password) > 20 {

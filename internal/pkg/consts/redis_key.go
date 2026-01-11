@@ -32,6 +32,7 @@ const (
 
 const (
 	UserDetailLock       = "user:detail:lock:"
+	UserDetailESLock     = "user:detail:es:lock:"
 	UserInterestInitLock = "lock:interest:init:"
 	ReportLock           = "report:lock:"
 )

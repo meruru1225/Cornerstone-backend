@@ -1,20 +1,23 @@
 package kafka
 
 import (
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/es"
+	"Cornerstone/internal/pkg/redis"
 	"context"
 	"errors"
 	log "log/slog"
 
 	"github.com/IBM/sarama"
+	"github.com/google/uuid"
 )
 
 type UserHandler struct {
 	userESRepo es.UserRepo
 }
 
-func NewUserHandler(userESRepo es.UserRepo) *UserDetailHandler {
-	return &UserDetailHandler{
+func NewUserHandler(userESRepo es.UserRepo) *UserHandler {
+	return &UserHandler{
 		userESRepo: userESRepo,
 	}
 }
@@ -41,7 +44,7 @@ func (s *UserHandler) ConsumeClaim(session sarama.ConsumerGroupSession, claim sa
 }
 
 func (s *UserHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) error {
-	canalMsg, err := ToCanalMessage(msg, "user_detail")
+	canalMsg, err := ToCanalMessage(msg, "users")
 	if err != nil {
 		return err
 	}
@@ -49,7 +52,15 @@ func (s *UserHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) er
 		return errors.New("canal message data is empty")
 	}
 
-	if canalMsg.Data[0]["is_deleted"] == "1" {
+	if canalMsg.Data[0]["is_delete"] == "1" {
+		id := canalMsg.Data[0]["id"]
+		lockKey := consts.UserDetailESLock + id.(string)
+		uuidStr := uuid.NewString()
+		_, err = redis.TryLock(ctx, lockKey, uuidStr, 30, -1)
+		defer redis.UnLock(ctx, lockKey, uuidStr)
+		if err != nil {
+			return err
+		}
 		return s.userESRepo.DeleteUser(ctx, StrToUint64(canalMsg.Data[0]["id"]))
 	}
 	return nil

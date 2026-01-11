@@ -1,13 +1,17 @@
 package kafka
 
 import (
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/es"
+	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
 	"context"
 	"fmt"
 	log "log/slog"
+	"strconv"
 
 	"github.com/IBM/sarama"
+	"github.com/google/uuid"
 )
 
 type UserDetailHandler struct {
@@ -52,9 +56,26 @@ func (s *UserDetailHandler) logic(ctx context.Context, msg *sarama.ConsumerMessa
 	if err != nil {
 		return err
 	}
-	err = s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
-	if err != nil {
-		return err
+	if canalMsg.Type == UPDATE {
+		lockKey := consts.UserDetailESLock + strconv.FormatUint(user.ID, 10)
+		uuidStr := uuid.NewString()
+		lock, err := redis.TryLock(ctx, lockKey, uuidStr, 30, 0)
+		defer redis.UnLock(ctx, lockKey, uuidStr)
+		if err != nil {
+			return err
+		}
+		if !lock {
+			return nil
+		}
+		exist, err := s.userESRepo.Exist(ctx, user.ID)
+		if err != nil {
+			return err
+		}
+		if !exist {
+			return nil
+		}
+	} else if canalMsg.Type == INSERT {
+		return s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
 	}
 	return nil
 }

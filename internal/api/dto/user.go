@@ -33,12 +33,11 @@ type RegisterDTO struct {
 	Phone      *string `json:"phone"`
 	PhoneToken *string `json:"phone_token"`
 
-	Nickname  string  `json:"nickname" validate:"required,min=1,max=15"`
-	AvatarURL *string `json:"avatar_url,omitempty"`
-	Bio       *string `json:"bio,omitempty"`
-	Gender    uint8   `json:"gender,omitempty"`
-	Region    *string `json:"region,omitempty"`
-	Birthday  string  `json:"birthday,omitempty" validate:"required"`
+	Nickname string  `json:"nickname" validate:"required,min=1,max=15"`
+	Bio      *string `json:"bio"`
+	Gender   uint8   `json:"gender"`
+	Region   *string `json:"region"`
+	Birthday string  `json:"birthday" validate:"required"`
 }
 
 // ForgetPasswordDTO 忘记密码
