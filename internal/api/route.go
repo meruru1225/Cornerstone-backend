@@ -67,11 +67,12 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 
 			// 需要登录 & 拥有 admin 角色
 			adminGroup := authGroup.Group("")
-			adminGroup.Use(middleware.CheckRoles("admin"))
+			adminGroup.Use(middleware.CheckRoles("ADMIN"))
 			{
 				adminGroup.POST("/ban", group.UserHandler.BanUser)
 				adminGroup.POST("/unban", group.UserHandler.UnbanUser)
 				adminGroup.GET("/condition", group.UserHandler.GetUserByCondition)
+				adminGroup.GET("/roles", group.UserHandler.GetAllRoles)
 				adminGroup.POST("/role", group.UserHandler.AddUserRole)
 				adminGroup.DELETE("/role", group.UserHandler.DeleteUserRole)
 			}
@@ -125,7 +126,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			}
 
 			auditGroup := authGroup.Group("/audit")
-			auditGroup.Use(middleware.AuthMiddleware(), middleware.CheckRoles("auditor", "admin"))
+			auditGroup.Use(middleware.AuthMiddleware(), middleware.CheckRoles("AUDIT", "ADMIN"))
 			{
 				auditGroup.GET("/list", group.PostHandler.GetWarningPosts)
 				auditGroup.POST("/status", group.PostHandler.UpdatePostStatus)

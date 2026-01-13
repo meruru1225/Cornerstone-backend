@@ -1,11 +1,13 @@
 package service
 
 import (
+	"Cornerstone/internal/model"
 	"Cornerstone/internal/repository"
 	"context"
 )
 
 type UserRolesService interface {
+	GetRoles(ctx context.Context) ([]*model.Role, error)
 	AddRoleToUser(ctx context.Context, userId uint64, roleId uint64) error
 	DeleteRoleFromUser(ctx context.Context, userId uint64, roleId uint64) error
 }
@@ -16,6 +18,10 @@ type UserRolesServiceImpl struct {
 
 func NewUserRolesService(userRolesRepo repository.UserRolesRepo) UserRolesService {
 	return &UserRolesServiceImpl{userRolesRepo: userRolesRepo}
+}
+
+func (s *UserRolesServiceImpl) GetRoles(ctx context.Context) ([]*model.Role, error) {
+	return s.userRolesRepo.GetRoles(ctx)
 }
 
 func (s *UserRolesServiceImpl) AddRoleToUser(ctx context.Context, userId uint64, roleId uint64) error {

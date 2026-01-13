@@ -59,7 +59,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	contentProcesser := processor.NewContentLLMProcessor()
 
 	// Service 实例
-	userService := service.NewUserService(userRepo, roleRepo, userESRepo)
+	userService := service.NewUserService(userRepo, roleRepo, userRolesRepo, userESRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
 	userFollowService := service.NewUserFollowService(userFollowRepo)
 	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)

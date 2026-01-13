@@ -12,6 +12,7 @@ import (
 	"context"
 	log "log/slog"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -34,23 +35,26 @@ type UserService interface {
 	UpdateUsername(ctx context.Context, id uint64, dto *dto.ChangeUsernameDTO) error
 	UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error
 	UpdateAvatar(ctx context.Context, id uint64, objectName string) error
-	BanUser(ctx context.Context, id uint64) error
+	BanUser(ctx context.Context, banID uint64, userID uint64) error
 	UnBanUser(ctx context.Context, id uint64) error
 	CancelUser(ctx context.Context, id uint64, token string) error
 	SearchUser(ctx context.Context, keyword string, page, pageSize int) ([]*dto.UserDTO, error)
+	InvalidateUser(ctx context.Context, userID uint64) error
 }
 
 type UserServiceImpl struct {
-	userRepo   repository.UserRepo
-	roleRepo   repository.RoleRepo
-	userESRepo es.UserRepo
+	userRepo      repository.UserRepo
+	roleRepo      repository.RoleRepo
+	userRolesRepo repository.UserRolesRepo
+	userESRepo    es.UserRepo
 }
 
-func NewUserService(userRepo repository.UserRepo, roleRepo repository.RoleRepo, userESRepo es.UserRepo) UserService {
+func NewUserService(userRepo repository.UserRepo, roleRepo repository.RoleRepo, userRolesRepo repository.UserRolesRepo, userESRepo es.UserRepo) UserService {
 	return &UserServiceImpl{
-		userRepo:   userRepo,
-		roleRepo:   roleRepo,
-		userESRepo: userESRepo,
+		userRepo:      userRepo,
+		roleRepo:      roleRepo,
+		userRolesRepo: userRolesRepo,
+		userESRepo:    userESRepo,
 	}
 }
 
@@ -275,7 +279,15 @@ func (s *UserServiceImpl) GetUserByCondition(ctx context.Context, dto *dto.GetUs
 	} else if dto.Phone != nil {
 		user, err = s.userRepo.GetUserByPhone(ctx, *dto.Phone)
 	} else if dto.Nickname != nil {
-		userList, err = s.userRepo.GetUserByNickname(ctx, *dto.Nickname)
+		searchUserList, _, err := s.userESRepo.SearchUser(ctx, *dto.Nickname, dto.Page-1, dto.PageSize)
+		if err != nil {
+			return nil, err
+		}
+		ids := make([]uint64, 0, len(searchUserList))
+		for _, item := range searchUserList {
+			ids = append(ids, item.ID)
+		}
+		userList, err = s.userRepo.GetUserByIds(ctx, ids)
 	}
 	if err != nil {
 		return nil, err
@@ -454,8 +466,24 @@ func (s *UserServiceImpl) UpdateAvatar(ctx context.Context, id uint64, objectNam
 	return nil
 }
 
-func (s *UserServiceImpl) BanUser(ctx context.Context, id uint64) error {
-	return s.changeUserIsBanStatus(ctx, id, true)
+func (s *UserServiceImpl) BanUser(ctx context.Context, banID uint64, userID uint64) error {
+	if banID == userID {
+		return ErrUserBanSelf
+	}
+	roles, err := s.userRolesRepo.GetUserRoles(ctx, banID)
+	if err != nil {
+		return err
+	}
+	for _, role := range roles {
+		if strings.ToUpper(role.Name) == "ADMIN" {
+			return ErrUserBanAdmin
+		}
+	}
+	err = s.changeUserIsBanStatus(ctx, banID, true)
+	if err != nil {
+		return err
+	}
+	return s.InvalidateUser(ctx, banID)
 }
 
 func (s *UserServiceImpl) UnBanUser(ctx context.Context, id uint64) error {
@@ -501,6 +529,11 @@ func (s *UserServiceImpl) SearchUser(ctx context.Context, keyword string, page, 
 	}
 
 	return s.batchToUserDTOFromES(esUsers)
+}
+
+func (s *UserServiceImpl) InvalidateUser(ctx context.Context, userID uint64) error {
+	key := consts.UserAuthVersionKey + strconv.FormatUint(userID, 10)
+	return redis.SetWithExpiration(ctx, key, time.Now().Unix(), 7*24*time.Hour)
 }
 
 func (s *UserServiceImpl) findUserByLoginCredentials(ctx context.Context, dto *dto.CredentialDTO) (*model.User, error) {
@@ -552,15 +585,14 @@ func (s *UserServiceImpl) checkPhoneSmsCode(ctx context.Context, phone *string, 
 }
 
 func (s *UserServiceImpl) changeUserIsBanStatus(ctx context.Context, id uint64, isBan bool) error {
-	user, err := s.userRepo.GetUserById(ctx, id)
+	rowAffected, err := s.userRepo.UpdateUserIsBan(ctx, id, isBan)
 	if err != nil {
 		return err
 	}
-	if user == nil {
+	if rowAffected == 0 {
 		return ErrUserNotFound
 	}
-	user.IsBan = isBan
-	return s.userRepo.UpdateUser(ctx, user)
+	return nil
 }
 
 func (s *UserServiceImpl) getUserDetailLock(ctx context.Context, lockKey string, value string) error {

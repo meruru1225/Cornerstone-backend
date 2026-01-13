@@ -3,6 +3,7 @@ package consts
 const (
 	SmsKey                      = "sms:validate:code:"
 	SmsCheckTokenKey            = "sms:check:token:"
+	UserAuthVersionKey          = "user:auth:version:"
 	UserHomeInfoKey             = "user:home:info:"
 	UserSimpleInfoKey           = "user:simple:info:"
 	UserFollowerKey             = "user:follower:"

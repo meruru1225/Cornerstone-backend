@@ -14,6 +14,9 @@ const (
 var (
 	ErrParamInvalid            = errors.New("参数错误")
 	ErrUserNotFound            = errors.New("用户不存在")
+	ErrUserBan                 = errors.New("用户已被封禁")
+	ErrUserBanSelf             = errors.New("不能封禁自己")
+	ErrUserBanAdmin            = errors.New("不能封禁管理员")
 	ErrUserExist               = errors.New("用户已存在")
 	ErrUserPhoneNotFound       = errors.New("手机号未注册")
 	ErrUserPhoneExist          = errors.New("手机号已注册")
@@ -38,6 +41,9 @@ var (
 var ErrorMap = map[error]int{
 	ErrParamInvalid:            BadRequest,
 	ErrUserNotFound:            NotFound,
+	ErrUserBan:                 Unauthorized,
+	ErrUserBanSelf:             Unauthorized,
+	ErrUserBanAdmin:            Unauthorized,
 	ErrUserExist:               BadRequest,
 	ErrUserPhoneNotFound:       NotFound,
 	ErrUserPhoneExist:          BadRequest,

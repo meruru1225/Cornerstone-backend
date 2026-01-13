@@ -52,10 +52,7 @@ func (s *UserHandler) Register(c *gin.Context) {
 }
 
 func (s *UserHandler) SendSmsCode(c *gin.Context) {
-	type phoneDTO struct {
-		Phone string `json:"phone"`
-	}
-	var req phoneDTO
+	var req dto.PhoneDTO
 	err := c.ShouldBind(&req)
 	if err != nil {
 		response.Error(c, err)
@@ -96,11 +93,7 @@ func (s *UserHandler) Login(c *gin.Context) {
 }
 
 func (s *UserHandler) LoginByPhone(c *gin.Context) {
-	type phoneLoginDTO struct {
-		Phone string `json:"phone"`
-		Code  string `json:"code"`
-	}
-	var req phoneLoginDTO
+	var req dto.PhoneLoginDTO
 	err := c.ShouldBind(&req)
 	if err != nil {
 		response.Error(c, err)
@@ -263,13 +256,14 @@ func (s *UserHandler) UpdateUserInfo(c *gin.Context) {
 }
 
 func (s *UserHandler) BanUser(c *gin.Context) {
-	userIDStr := c.Query("user_id")
-	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	userID := c.GetUint64("user_id")
+	var banUserDTO dto.BanUserDTO
+	err := c.ShouldBind(&banUserDTO)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	err = s.userSvc.BanUser(c.Request.Context(), userID)
+	err = s.userSvc.BanUser(c.Request.Context(), banUserDTO.UserID, userID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -278,13 +272,13 @@ func (s *UserHandler) BanUser(c *gin.Context) {
 }
 
 func (s *UserHandler) UnbanUser(c *gin.Context) {
-	userIDStr := c.Query("user_id")
-	userID, err := strconv.ParseUint(userIDStr, 10, 64)
+	var banUserDTO dto.BanUserDTO
+	err := c.ShouldBind(&banUserDTO)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	err = s.userSvc.UnBanUser(c.Request.Context(), userID)
+	err = s.userSvc.UnBanUser(c.Request.Context(), banUserDTO.UserID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -311,6 +305,12 @@ func (s *UserHandler) GetUserByCondition(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
+	if conditionDTO.Page == 0 {
+		conditionDTO.Page = 1
+	}
+	if conditionDTO.PageSize == 0 {
+		conditionDTO.PageSize = 20
+	}
 	if conditionDTO.ID == nil && conditionDTO.Phone == nil && conditionDTO.Username == nil && conditionDTO.Nickname == nil {
 		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
 		return
@@ -323,6 +323,15 @@ func (s *UserHandler) GetUserByCondition(c *gin.Context) {
 	response.Success(c, users)
 }
 
+func (s *UserHandler) GetAllRoles(c *gin.Context) {
+	roles, err := s.userRolesSvc.GetRoles(c.Request.Context())
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, roles)
+}
+
 func (s *UserHandler) AddUserRole(c *gin.Context) {
 	var userRole model.UserRole
 	err := c.ShouldBind(&userRole)
@@ -331,6 +340,11 @@ func (s *UserHandler) AddUserRole(c *gin.Context) {
 		return
 	}
 	err = s.userRolesSvc.AddRoleToUser(c.Request.Context(), userRole.UserID, userRole.RoleID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	err = s.userSvc.InvalidateUser(c.Request.Context(), userRole.UserID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -346,6 +360,11 @@ func (s *UserHandler) DeleteUserRole(c *gin.Context) {
 		return
 	}
 	err = s.userRolesSvc.DeleteRoleFromUser(c.Request.Context(), userRole.UserID, userRole.RoleID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	err = s.userSvc.InvalidateUser(c.Request.Context(), userRole.UserID)
 	if err != nil {
 		response.Error(c, err)
 		return

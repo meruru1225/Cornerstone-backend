@@ -1,10 +1,12 @@
 package middleware
 
 import (
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/pkg/response"
 	"Cornerstone/internal/pkg/security"
 	"context"
+	"strconv"
 	"strings"
 
 	"github.com/gin-gonic/gin"
@@ -22,30 +24,35 @@ func AuthMiddleware() gin.HandlerFunc {
 
 		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
 
-		signature, err := security.ExtractSignature(tokenString)
-		if err != nil {
-			response.Fail(c, response.Unauthorized, "Token 缺失或格式错误")
-			c.Abort()
-			return
-		}
-
-		value, err := redis.GetValue(c.Request.Context(), signature)
-		if err != nil {
-			response.Fail(c, response.InternalServerError, "未知错误")
-			c.Abort()
-			return
-		}
-		if value != "" {
-			response.Fail(c, response.Unauthorized, "Token 无效或已过期")
-			c.Abort()
-			return
-		}
-
+		// 验证 Token
 		claims, err := security.ValidateToken(tokenString)
 		if err != nil {
 			response.Fail(c, response.Unauthorized, "Token 无效或已过期")
 			c.Abort()
 			return
+		}
+
+		// 检查 Token 是否已注销
+		signature, err := security.ExtractSignature(tokenString)
+		if err == nil {
+			value, _ := redis.GetValue(c.Request.Context(), signature)
+			if value != "" {
+				response.Fail(c, response.Unauthorized, "Token 已注销")
+				c.Abort()
+				return
+			}
+		}
+
+		// 检查用户权限是否已更新
+		key := consts.UserAuthVersionKey + strconv.FormatUint(claims.UserID, 10)
+		verVal, _ := redis.GetValue(c.Request.Context(), key)
+		if verVal != "" {
+			lastInvalidateTime, err := strconv.ParseInt(verVal, 10, 64)
+			if err == nil && lastInvalidateTime >= claims.IssuedAt.Time.Unix() {
+				response.Fail(c, response.Unauthorized, "权限已更新，请重新登录")
+				c.Abort()
+				return
+			}
 		}
 
 		c.Set("user_id", claims.UserID)

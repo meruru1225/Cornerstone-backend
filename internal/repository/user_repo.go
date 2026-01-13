@@ -12,13 +12,14 @@ import (
 
 type UserRepo interface {
 	GetUserById(ctx context.Context, id uint64) (*model.User, error)
+	GetUserByIds(ctx context.Context, ids []uint64) ([]*model.User, error)
 	GetUserByUsername(ctx context.Context, username string) (*model.User, error)
 	GetUserByPhone(ctx context.Context, phone string) (*model.User, error)
-	GetUserByNickname(ctx context.Context, s string) ([]*model.User, error)
 	GetUserHomeInfoById(ctx context.Context, id uint64) (*model.UserDetail, error)
 	GetUserSimpleInfoByIds(ctx context.Context, ids []uint64) ([]*model.UserDetail, error)
 	CreateUser(ctx context.Context, user *model.User, detail *model.UserDetail, roles *[]*model.UserRole) error
 	UpdateUser(ctx context.Context, user *model.User) error
+	UpdateUserIsBan(ctx context.Context, id uint64, isBan bool) (int64, error)
 	UpdateUserDetail(ctx context.Context, detail *model.UserDetail) error
 	UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error
 	DeleteUser(ctx context.Context, id uint64) error
@@ -47,6 +48,19 @@ func (s *UserRepoImpl) GetUserById(ctx context.Context, id uint64) (*model.User,
 	}
 
 	return user, nil
+}
+
+func (s *UserRepoImpl) GetUserByIds(ctx context.Context, ids []uint64) ([]*model.User, error) {
+	users := make([]*model.User, 0)
+	result := s.db.WithContext(ctx).
+		Preload("UserDetail").
+		Preload("UserRoles").
+		Where("id IN ?", ids).
+		Find(&users)
+	if result.Error != nil {
+		return nil, result.Error
+	}
+	return users, nil
 }
 
 func (s *UserRepoImpl) GetUserByUsername(ctx context.Context, username string) (*model.User, error) {
@@ -83,19 +97,6 @@ func (s *UserRepoImpl) GetUserByPhone(ctx context.Context, phone string) (*model
 	}
 
 	return user, nil
-}
-
-func (s *UserRepoImpl) GetUserByNickname(ctx context.Context, nickname string) ([]*model.User, error) {
-	users := make([]*model.User, 0)
-	result := s.db.WithContext(ctx).
-		Preload("UserDetail").
-		Preload("UserRoles").
-		Where("nickname = ?", nickname).
-		Find(&users)
-	if result.Error != nil {
-		return nil, result.Error
-	}
-	return users, nil
 }
 
 func (s *UserRepoImpl) GetUserHomeInfoById(ctx context.Context, id uint64) (*model.UserDetail, error) {
@@ -155,6 +156,15 @@ func (s *UserRepoImpl) UpdateUser(ctx context.Context, user *model.User) error {
 		return result.Error
 	}
 	return nil
+}
+
+func (s *UserRepoImpl) UpdateUserIsBan(ctx context.Context, id uint64, isBan bool) (int64, error) {
+	result := s.db.WithContext(ctx).
+		Model(&model.User{}).
+		Where("id = ?", id).
+		Update("is_ban", isBan)
+
+	return result.RowsAffected, result.Error
 }
 
 func (s *UserRepoImpl) UpdateUserDetail(ctx context.Context, detail *model.UserDetail) error {

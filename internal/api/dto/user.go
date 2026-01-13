@@ -17,10 +17,12 @@ type UserDTO struct {
 
 // GetUserByConditionDTO 搜索用户
 type GetUserByConditionDTO struct {
-	ID       *uint64 `json:"id,omitempty"`
-	Phone    *string `json:"phone,omitempty"`
-	Username *string `json:"username,omitempty"`
-	Nickname *string `json:"nickname,omitempty"`
+	ID       *uint64 `form:"id"`
+	Phone    *string `form:"phone"`
+	Username *string `form:"username"`
+	Nickname *string `form:"nickname"`
+	Page     int     `form:"page" validate:"gte=1"`
+	PageSize int     `form:"page_size" validate:"gte=1,lte=100"`
 }
 
 // RegisterDTO 注册
@@ -69,4 +71,19 @@ type ChangePhoneDTO struct {
 type ChangePasswordDTO struct {
 	OldPassword *string `json:"old_password" binding:"required" validate:"min=6,max=20"`
 	NewPassword *string `json:"new_password" binding:"required" validate:"min=6,max=20"`
+}
+
+// PhoneDTO 手机号
+type PhoneDTO struct {
+	Phone string `json:"phone"`
+}
+
+// PhoneLoginDTO 手机号登录
+type PhoneLoginDTO struct {
+	Phone string `json:"phone"`
+	Code  string `json:"code"`
+}
+
+type BanUserDTO struct {
+	UserID uint64 `json:"user_id"`
 }
