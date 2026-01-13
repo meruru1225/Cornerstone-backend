@@ -33,7 +33,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			agentGroup.GET("/search", group.AgentHandler.Search)
 
 			authGroup := agentGroup.Group("")
-			authGroup.Use(middleware.AuthMiddleware())
+			authGroup.Use(middleware.AuthOptionalMiddleware())
 			{
 				authGroup.POST("/converse", group.AgentHandler.Converse)
 			}

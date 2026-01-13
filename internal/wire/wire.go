@@ -46,6 +46,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	// Mongo 实例
 	messageMongoRepo := mongo.NewMessageRepo(mongoConn)
 	sysBoxRepo := mongo.NewSysBoxRepo(mongoConn)
+	agentMessageRepo := mongo.NewAgentMessageRepo(mongoConn)
 
 	// ES 实例
 	userESRepo := es.NewUserRepo()
@@ -53,7 +54,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 
 	// Agent
 	toolHandler := llm.NewToolHandler(postESRepo)
-	agent := llm.NewAgent(toolHandler, messageMongoRepo)
+	agent := llm.NewAgent(toolHandler, agentMessageRepo)
 
 	// Processor
 	contentProcesser := processor.NewContentLLMProcessor()

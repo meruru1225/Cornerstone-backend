@@ -4,7 +4,6 @@ import (
 	"Cornerstone/internal/pkg/mongo"
 	"context"
 	"fmt"
-	"strconv"
 	"strings"
 	"time"
 
@@ -22,14 +21,14 @@ type Agent interface {
 }
 
 type AgentImpl struct {
-	handler     *ToolHandler
-	messageRepo mongo.MessageRepo
+	handler          *ToolHandler
+	agentMessageRepo mongo.AgentMessageRepo
 }
 
-func NewAgent(handler *ToolHandler, messageRepo mongo.MessageRepo) Agent {
+func NewAgent(handler *ToolHandler, agentMessageRepo mongo.AgentMessageRepo) Agent {
 	return &AgentImpl{
-		handler:     handler,
-		messageRepo: messageRepo,
+		handler:          handler,
+		agentMessageRepo: agentMessageRepo,
 	}
 }
 
@@ -67,14 +66,18 @@ func (s *AgentImpl) ChatSingle(ctx context.Context, userInput string) chan strin
 // Converse 多轮对话Agent
 func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string) chan string {
 	out := make(chan string, 100)
-	convID, _ := strconv.ParseUint(chatId, 10, 64)
-	userID := ctx.Value("user_id").(uint64)
+
+	userID, ok := ctx.Value("user_id").(uint64)
+	if !ok {
+		userID = 1
+	}
+
+	persistenceCtx := context.Background()
 
 	go func() {
 		defer close(out)
 
-		// 获取历史记录
-		history, _ := s.messageRepo.GetHistory(ctx, convID, 0, 20)
+		history, _ := s.agentMessageRepo.GetHistory(ctx, chatId, 20)
 
 		var messages []llms.MessageContent
 		messages = append(messages, llms.MessageContent{
@@ -83,10 +86,9 @@ func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string
 		})
 
 		// 转换历史记录
-		for i := len(history) - 1; i >= 0; i-- {
-			msg := history[i]
+		for _, msg := range history {
 			role := llms.ChatMessageTypeHuman
-			if msg.SenderID == 0 {
+			if msg.SenderID == 0 { // 0 约定为 AI
 				role = llms.ChatMessageTypeAI
 			}
 			messages = append(messages, llms.MessageContent{
@@ -95,26 +97,22 @@ func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string
 			})
 		}
 
-		// 特殊处理：手动获取 Seq 并保存用户消息
-		userSeq, _ := s.messageRepo.GetNextSeq(ctx, convID)
-		userMsg := &mongo.Message{
-			ConversationID: convID,
+		// 保存用户当前问题
+		_ = s.agentMessageRepo.SaveMessage(persistenceCtx, &mongo.AgentMessage{
+			ConversationID: chatId,
 			SenderID:       userID,
-			MsgType:        1,
 			Content:        question,
-			Seq:            userSeq,
 			CreatedAt:      time.Now(),
-		}
-		_ = s.messageRepo.SaveMessage(ctx, userMsg)
+		})
 
+		// 将当前问题加入对话上下文
 		messages = append(messages, llms.MessageContent{
 			Role:  llms.ChatMessageTypeHuman,
 			Parts: []llms.ContentPart{llms.TextPart(question)},
 		})
 
-		// 执行 Agent 推理
 		var aiFullContent strings.Builder
-		streamCapture := func(ctx context.Context, chunk []byte) error {
+		streamCapture := func(c context.Context, chunk []byte) error {
 			str := string(chunk)
 			if strings.HasPrefix(str, "[{") || strings.Contains(str, "\"tool_calls\"") {
 				return nil
@@ -126,18 +124,13 @@ func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string
 
 		_ = s.runAgentLoopWithCapture(ctx, messages, out, streamCapture, 5)
 
-		// 特殊处理：手动获取 Seq 并保存 AI 回答
 		if aiFullContent.Len() > 0 {
-			aiSeq, _ := s.messageRepo.GetNextSeq(ctx, convID)
-			aiMsg := &mongo.Message{
-				ConversationID: convID,
-				SenderID:       0,
-				MsgType:        1,
+			_ = s.agentMessageRepo.SaveMessage(persistenceCtx, &mongo.AgentMessage{
+				ConversationID: chatId,
+				SenderID:       0, // 0 代表 AI
 				Content:        aiFullContent.String(),
-				Seq:            aiSeq,
 				CreatedAt:      time.Now(),
-			}
-			_ = s.messageRepo.SaveMessage(ctx, aiMsg)
+			})
 		}
 	}()
 
