@@ -37,7 +37,7 @@ type MediaItem struct {
 	MediaURL string  `json:"url"`
 	Width    int     `json:"width"`
 	Height   int     `json:"height"`
-	Duration int     `json:"duration"`
+	Duration float64 `json:"duration"`
 	CoverURL *string `json:"cover_url,omitempty"`
 }
 

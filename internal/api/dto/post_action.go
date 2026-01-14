@@ -52,6 +52,10 @@ type PostBatchLikesDTO struct {
 
 // PostActionReq 点赞/收藏通用请求
 type PostActionReq struct {
-	PostID uint64 `json:"post_id" binding:"required"`
-	Action int    `json:"action" binding:"required,oneof=1 2"` // 1:执行, 2:取消
+	Action int `json:"action" binding:"required,oneof=1 2"` // 1:执行, 2:取消
+}
+
+// PostReport 举报帖子请求
+type PostReport struct {
+	Reason string `json:"reason" binding:"required"`
 }

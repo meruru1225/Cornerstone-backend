@@ -34,7 +34,10 @@ func AuditMiddleware() gin.HandlerFunc {
 		ctx := c.Request.Context()
 
 		var reqBody []byte
-		if c.Request.Body != nil {
+		contentType := c.ContentType()
+		isMultipart := contentType == "multipart/form-data"
+
+		if c.Request.Body != nil && !isMultipart {
 			reqBody, _ = io.ReadAll(c.Request.Body)
 			c.Request.Body = io.NopCloser(bytes.NewBuffer(reqBody))
 		}
@@ -45,11 +48,17 @@ func AuditMiddleware() gin.HandlerFunc {
 			decodedQuery = rawQuery
 		}
 
+		reqBodyStr := "[File Content Ignored]"
+		if !isMultipart {
+			reqBodyStr = string(reqBody)
+		}
+
 		log.InfoContext(ctx, "Recv Request",
 			log.String("method", c.Request.Method),
 			log.String("path", c.Request.URL.Path),
 			log.String("query", decodedQuery),
-			log.String("req_body", string(reqBody)),
+			log.String("req_body", reqBodyStr),
+			log.String("content_type", contentType),
 		)
 
 		w := &responseBodyWriter{body: &bytes.Buffer{}, ResponseWriter: c.Writer}

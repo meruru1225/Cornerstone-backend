@@ -9,6 +9,7 @@ import (
 	"image"
 	"image/jpeg"
 	"io"
+	log "log/slog"
 	"net/http"
 	"os"
 	"os/exec"
@@ -106,6 +107,37 @@ func GetAudioStream(ctx context.Context, mediaUrl string) (io.ReadCloser, error)
 	}
 
 	return stdout, nil
+}
+
+// GetCover 获取视频封面图（第一帧）
+func GetCover(ctx context.Context, mediaUrl string) (io.Reader, error) {
+	ffmpegPath := getLibPath(config.Cfg.LibPath.FFmpeg)
+
+	// 快进 1 秒
+	cmd := exec.CommandContext(ctx, ffmpegPath,
+		"-ss", "00:00:01",
+		"-i", mediaUrl,
+		"-vframes", "1",
+		"-q:v", "2",
+		"-f", "image2pipe",
+		"-vcodec", "mjpeg",
+		"pipe:1",
+	)
+
+	var stdout bytes.Buffer
+	var stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	if err := cmd.Run(); err != nil {
+		log.ErrorContext(ctx, "FFmpeg GetCover Error",
+			log.String("stderr", stderr.String()),
+			log.Any("err", err),
+		)
+		return nil, fmt.Errorf("ffmpeg capture failed: %v", err)
+	}
+
+	return bytes.NewReader(stdout.Bytes()), nil
 }
 
 // GetImageFrames 获取视频帧

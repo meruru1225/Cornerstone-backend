@@ -104,11 +104,11 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	}
 
 	post.Status = int(atomic.LoadInt32(&r.MaxStatus))
+	if err = s.postDBRepo.UpdatePostStatus(ctx, post.ID, post.Status); err != nil {
+		return err
+	}
 	if post.Status == int(llm.ContentSafeDeny) {
 		log.WarnContext(ctx, "内容审核未通过，拦截后续处理", "post_id", post.ID)
-		if err = s.postDBRepo.UpdatePostStatus(ctx, post.ID, post.Status); err != nil {
-			return err
-		}
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
 

@@ -27,7 +27,7 @@ func NewAgentHandler(agent llm.Agent) *AgentHandler {
 func (s *AgentHandler) Search(c *gin.Context) {
 	query := c.Query("query")
 	if query == "" {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 

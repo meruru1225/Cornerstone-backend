@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io"
 	"net/url"
+	"strings"
 
 	"github.com/minio/minio-go/v7"
 )
@@ -68,7 +69,7 @@ func GetPublicURL(objectName string) string {
 		endpoint = cfg.ExternalEndpoint
 		protocol = "https"
 	}
-	safeObjectName := url.PathEscape(objectName)
+	safeObjectName := safePath(objectName)
 	publicURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, MainBucket, safeObjectName)
 	return publicURL
 }
@@ -76,14 +77,14 @@ func GetPublicURL(objectName string) string {
 // GetForcePublicURL 强制获取文件的公网公开访问URL
 func GetForcePublicURL(objectName string) string {
 	cfg := config.Cfg.MinIO
-	safeObjectName := url.PathEscape(objectName)
+	safeObjectName := safePath(objectName)
 	publicURL := fmt.Sprintf("https://%s/%s/%s", cfg.ExternalEndpoint, MainBucket, safeObjectName)
 	return publicURL
 }
 
 func GetInternalFileURL(objectName string) string {
 	cfg := config.Cfg.MinIO
-	safeObjectName := url.PathEscape(objectName)
+	safeObjectName := safePath(objectName)
 	protocol := "http"
 	internalURL := fmt.Sprintf("%s://%s/%s/%s", protocol, cfg.InternalEndpoint, MainBucket, safeObjectName)
 	return internalURL
@@ -107,7 +108,11 @@ func GetTempFileURL(objectName string, external bool) string {
 	if useSSL {
 		protocol = "https"
 	}
-	safeObjectName := url.PathEscape(objectName)
+	safeObjectName := safePath(objectName)
 	tempURL := fmt.Sprintf("%s://%s/%s/%s", protocol, endpoint, TempBucket, safeObjectName)
 	return tempURL
+}
+
+func safePath(objectName string) string {
+	return strings.ReplaceAll(url.PathEscape(objectName), "%2F", "/")
 }

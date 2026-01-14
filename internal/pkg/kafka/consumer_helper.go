@@ -87,6 +87,11 @@ func processBatch(session sarama.ConsumerGroupSession, messages []*sarama.Consum
 			retryInterval := time.Duration(cfg.RetryInterval) * time.Millisecond
 
 			for retry := 0; ; retry++ {
+				if err := ctx.Err(); err != nil {
+					log.WarnContext(ctx, "kafka process stopped: context cancelled", "err", err, "retry_count", retry)
+					break
+				}
+
 				err := logic(ctx, m)
 				if err == nil {
 					log.InfoContext(ctx, "kafka message processed successfully", "message index", idx)

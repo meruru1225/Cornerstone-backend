@@ -73,6 +73,9 @@ func (s *PostRepoImpl) GetPostById(ctx context.Context, id uint64) (*PostES, err
 		}
 		return nil, err
 	}
+	if result.Source_ == nil {
+		return nil, nil
+	}
 	var post PostES
 	if err = json.Unmarshal(result.Source_, &post); err != nil {
 		return nil, err

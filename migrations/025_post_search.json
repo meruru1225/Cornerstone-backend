@@ -84,7 +84,7 @@
             "index": false
           },
           "duration": {
-            "type": "integer",
+            "type": "float",
             "index": false
           }
         }

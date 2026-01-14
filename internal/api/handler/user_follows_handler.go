@@ -68,13 +68,13 @@ func (s *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 	followingIdStr := c.Param("following_id")
 
 	if followingIdStr == "" {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 
 	followingId, err := strconv.ParseUint(followingIdStr, 10, 64)
 	if err != nil {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	userFollow, err := s.userFollowSvc.GetSomeoneIsFollowing(c, userId, followingId)
@@ -90,7 +90,7 @@ func (s *UserFollowHandler) Follow(c *gin.Context) {
 	followingIdStr := c.Param("following_id")
 	followingId, err := strconv.ParseUint(followingIdStr, 10, 64)
 	if err != nil {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	err = s.userFollowSvc.CreateUserFollow(c, &model.UserFollow{
@@ -109,7 +109,7 @@ func (s *UserFollowHandler) Unfollow(c *gin.Context) {
 	followingIdStr := c.Param("following_id")
 	followingId, err := strconv.ParseUint(followingIdStr, 10, 64)
 	if err != nil {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	err = s.userFollowSvc.DeleteUserFollow(c, &model.UserFollow{

@@ -3,6 +3,7 @@ package handler
 import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/pkg/response"
+	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/service"
 	"strconv"
 
@@ -58,6 +59,10 @@ func (s *PostHandler) CreatePost(c *gin.Context) {
 
 	var req dto.PostBaseDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+	if err := util.ValidateDTO(&req); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -77,12 +82,16 @@ func (s *PostHandler) UpdatePostContent(c *gin.Context) {
 
 	postID, err := strconv.ParseInt(postIDStr, 10, 64)
 	if err != nil {
-		response.Error(c, err)
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 
 	var baseDTO dto.PostBaseDTO
-	if err := c.ShouldBindJSON(&baseDTO); err != nil {
+	if err = c.ShouldBindJSON(&baseDTO); err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err = util.ValidateDTO(&baseDTO); err != nil {
 		response.Error(c, err)
 		return
 	}
@@ -153,13 +162,22 @@ func (s *PostHandler) GetPostSelf(c *gin.Context) {
 
 // GetPostByUserId 获取指定用户的公开帖子列表
 func (s *PostHandler) GetPostByUserId(c *gin.Context) {
-	targetUID, _ := strconv.ParseUint(c.Param("user_id"), 10, 64)
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-
+	targetUID, err := strconv.ParseUint(c.Param("user_id"), 10, 64)
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
 	if targetUID == 0 {
 		response.Error(c, service.ErrParamInvalid)
 		return
+	}
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil {
+		page = 1
+	}
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if err != nil {
+		pageSize = 20
 	}
 
 	posts, err := s.postSvc.GetPostByUserId(c.Request.Context(), targetUID, page, pageSize)
@@ -172,8 +190,14 @@ func (s *PostHandler) GetPostByUserId(c *gin.Context) {
 
 // GetWarningPosts 审核员：获取待审核列表
 func (s *PostHandler) GetWarningPosts(c *gin.Context) {
-	lastID, _ := strconv.ParseUint(c.DefaultQuery("last_id", "0"), 10, 64)
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	lastID, err := strconv.ParseUint(c.DefaultQuery("last_id", "0"), 10, 64)
+	if err != nil {
+		lastID = 0
+	}
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if err != nil {
+		pageSize = 20
+	}
 
 	posts, err := s.postSvc.GetWarningPosts(c.Request.Context(), lastID, pageSize)
 	if err != nil {
@@ -183,18 +207,25 @@ func (s *PostHandler) GetWarningPosts(c *gin.Context) {
 	response.Success(c, posts)
 }
 
-// UpdatePostStatus 审核员：操作帖子（通过、封禁、驳回）
+// UpdatePostStatus 审核员：操作帖子（通过、驳回）
 func (s *PostHandler) UpdatePostStatus(c *gin.Context) {
-	var req struct {
-		PostID uint64 `json:"post_id" binding:"required"`
-		Status int    `json:"status" binding:"required"`
+	postIDStr := c.Param("post_id")
+	postID, err := strconv.ParseInt(postIDStr, 10, 64)
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
 	}
+	var req dto.PostUpdateDTO
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
+	if err := util.ValidateDTO(req); err != nil {
+		response.Error(c, err)
+		return
+	}
 
-	if err := s.postSvc.UpdatePostStatus(c.Request.Context(), req.PostID, req.Status); err != nil {
+	if err := s.postSvc.UpdatePostStatus(c.Request.Context(), uint64(postID), req.Status); err != nil {
 		response.Error(c, err)
 		return
 	}

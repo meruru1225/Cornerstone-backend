@@ -12,6 +12,7 @@ import (
 type PostRepo interface {
 	CreatePost(ctx context.Context, post *model.Post) error
 	GetPost(ctx context.Context, id uint64) (*model.Post, error)
+	GetPostByAllStatus(ctx context.Context, id uint64) (*model.Post, error)
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*model.Post, error)
 	GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
@@ -61,6 +62,28 @@ func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, err
 	}
 
 	return &post, nil
+}
+
+func (s *PostRepoImpl) GetPostByAllStatus(ctx context.Context, id uint64) (*model.Post, error) {
+	var posts *model.Post
+	err := s.db.WithContext(ctx).
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("id")
+		}).
+		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
+			return db.Select("user_id", "nickname", "avatar_url")
+		}).
+		Where("id = ? AND is_deleted = ?", id, false).
+		First(&posts).Error
+
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	return posts, nil
 }
 
 // GetPostByIds 批量获取笔记

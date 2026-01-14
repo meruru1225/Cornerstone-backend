@@ -8,6 +8,7 @@ import (
 	"Cornerstone/internal/pkg/llm"
 	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/redis"
+	"Cornerstone/internal/pkg/util"
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
@@ -150,12 +151,19 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 		if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
 			return err
 		}
+		if err := getCover(ctx, mediaDTO); err != nil {
+			return err
+		}
 		hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
 	}
 
 	post := &model.Post{}
-	_ = copier.Copy(post, postDTO)
-	_ = copier.Copy(&post.MediaList, &postDTO.Medias)
+	if err := copier.Copy(post, postDTO); err != nil {
+		return err
+	}
+	if err := copier.Copy(&post.MediaList, &postDTO.Medias); err != nil {
+		return err
+	}
 	post.UserID = userID
 
 	if err := s.postDBRepo.CreatePost(ctx, post); err != nil {
@@ -163,9 +171,9 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 	}
 
 	if len(hdelKeys) > 0 {
-		go func() {
+		go func(keys []string) {
 			_ = redis.HDel(context.Background(), consts.MediaTempKey, hdelKeys...)
-		}()
+		}(hdelKeys)
 	}
 
 	return nil
@@ -185,6 +193,9 @@ func (s *postServiceImpl) GetPost(ctx context.Context, userID uint64, PostID uin
 	post, err := s.postESRepo.GetPostById(ctx, PostID)
 	if err != nil {
 		return nil, err
+	}
+	if post == nil {
+		return nil, ErrPostNotFound
 	}
 
 	go func(uid uint64, tags []string) {
@@ -206,7 +217,7 @@ func (s *postServiceImpl) GetPostByIds(ctx context.Context, ids []uint64) ([]*dt
 func (s *postServiceImpl) GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error) {
 	return getWaterfallPosts(pageSize,
 		func() ([]*model.Post, error) {
-			return s.postDBRepo.GetPostByUserId(ctx, userId, pageSize+1, (page-1)*pageSize)
+			return s.postDBRepo.GetPostByUserId(ctx, userId, pageSize, (page-1)*pageSize)
 		},
 		s.batchToPostDTO,
 	)
@@ -271,9 +282,12 @@ func (s *postServiceImpl) UpdatePostStatus(ctx context.Context, postID uint64, s
 
 // UpdatePostContent 更新帖子内容及媒体
 func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error {
-	oldPost, err := s.postDBRepo.GetPost(ctx, postID)
+	oldPost, err := s.postDBRepo.GetPostByAllStatus(ctx, postID)
 	if err != nil {
 		return err
+	}
+	if oldPost == nil {
+		return ErrPostNotFound
 	}
 	if oldPost.UserID != userID {
 		return UnauthorizedError
@@ -288,6 +302,9 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 	for _, oldMedia := range oldPost.MediaList {
 		if _, exists := newMediaMap[oldMedia.MediaURL]; !exists {
 			toDeleteKeys = append(toDeleteKeys, oldMedia.MediaURL)
+			if oldMedia.CoverURL != nil && *oldMedia.CoverURL != "" {
+				toDeleteKeys = append(toDeleteKeys, *oldMedia.CoverURL)
+			}
 		}
 	}
 
@@ -305,16 +322,24 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 			if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
 				return err
 			}
+			if err := getCover(ctx, mediaDTO); err != nil {
+				return err
+			}
 			hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
+			if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
+				hdelKeys = append(hdelKeys, *mediaDTO.CoverURL)
+			}
 		}
 	}
 
 	if err = copier.Copy(oldPost, postDTO); err != nil {
 		return err
 	}
-	if err = copier.Copy(&oldPost.MediaList, &postDTO.Medias); err != nil {
+	var newMediaList model.MediaList
+	if err = copier.Copy(&newMediaList, &postDTO.Medias); err != nil {
 		return err
 	}
+	oldPost.MediaList = newMediaList
 
 	if err = s.postDBRepo.UpdatePostContent(ctx, oldPost); err != nil {
 		return err
@@ -425,6 +450,10 @@ func (s *postServiceImpl) toPostDTO(post *model.Post) (*dto.PostDTO, error) {
 	}
 	for _, m := range out.Medias {
 		m.MediaURL = minio.GetPublicURL(m.MediaURL)
+		if m.CoverURL != nil {
+			url := minio.GetPublicURL(*m.CoverURL)
+			m.CoverURL = &url
+		}
 	}
 
 	defaultAvatarUrl := minio.GetPublicURL("default_avatar.png")
@@ -457,13 +486,14 @@ func (s *postServiceImpl) toPostDTOByES(post *es.PostES) (*dto.PostDTO, error) {
 	out.UpdatedAt = post.UpdatedAt.Format("2006-01-02 15:04:05")
 	var mediaBaseDTO []*dto.MediasBaseDTO
 	for _, media := range post.Media {
+		url := minio.GetPublicURL(media.URL)
 		mediaBaseDTO = append(mediaBaseDTO, &dto.MediasBaseDTO{
 			MimeType: media.Type,
 			MediaURL: minio.GetPublicURL(media.URL),
 			Width:    media.Width,
 			Height:   media.Height,
 			Duration: media.Duration,
-			CoverURL: media.Cover,
+			CoverURL: &url,
 		})
 	}
 	out.Medias = mediaBaseDTO
@@ -538,8 +568,30 @@ func verifyAndFillMediaMeta(ctx context.Context, mediaDTO *dto.MediasBaseDTO) er
 
 	mediaDTO.Width = meta.Width
 	mediaDTO.Height = meta.Height
-	mediaDTO.Duration = int(meta.Duration)
+	mediaDTO.Duration = meta.Duration
 	mediaDTO.MimeType = meta.MimeType
 
+	return nil
+}
+
+func getCover(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
+	if strings.HasPrefix(mediaDTO.MimeType, "video") &&
+		mediaDTO.CoverURL == nil {
+		stream, err := util.GetCover(ctx, minio.GetPublicURL(mediaDTO.MediaURL))
+		if err != nil {
+			return err
+		}
+		coverName := time.Now().Format("2006/01/02/") + uuid.NewString() + ".jpg"
+		var fileKey string
+		if seeker, ok := stream.(interface{ Size() int64 }); ok {
+			fileKey, err = minio.UploadFile(ctx, coverName, stream, seeker.Size(), "image/jpeg")
+		} else {
+			fileKey, err = minio.UploadFile(ctx, coverName, stream, -1, "image/jpeg")
+		}
+		if err != nil {
+			return err
+		}
+		mediaDTO.CoverURL = &fileKey
+	}
 	return nil
 }

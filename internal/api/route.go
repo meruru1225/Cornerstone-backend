@@ -105,7 +105,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			}
 		}
 
-		postGroup := apiGroup.Group("/post")
+		postGroup := apiGroup.Group("/posts")
 		{
 			authOptGroup := postGroup.Group("")
 			authOptGroup.Use(middleware.AuthOptionalMiddleware())
@@ -129,31 +129,31 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			auditGroup.Use(middleware.AuthMiddleware(), middleware.CheckRoles("AUDIT", "ADMIN"))
 			{
 				auditGroup.GET("/list", group.PostHandler.GetWarningPosts)
-				auditGroup.POST("/status", group.PostHandler.UpdatePostStatus)
+				auditGroup.PUT("/:post_id/status", group.PostHandler.UpdatePostStatus)
 			}
 		}
 
-		postActionGroup := apiGroup.Group("/post-action")
+		postActionGroup := apiGroup.Group("/post/action")
 		{
-			postActionGroup.GET("/comments", group.PostActionHandler.GetComments)
-			postActionGroup.GET("/sub-comments", group.PostActionHandler.GetSubComments)
-			postActionGroup.POST("/batch-likes", group.PostActionHandler.GetBatchLikes)
+			postActionGroup.GET("/comments/:post_id", group.PostActionHandler.GetComments)
+			postActionGroup.GET("/sub-comments/:root_id", group.PostActionHandler.GetSubComments)
+			postActionGroup.POST("/batch/likes", group.PostActionHandler.GetBatchLikes)
 
 			authActionGroup := postActionGroup.Group("")
 			authActionGroup.Use(middleware.AuthMiddleware())
 			{
-				authActionGroup.POST("/like", group.PostActionHandler.LikePost)
-				authActionGroup.POST("/collect", group.PostActionHandler.CollectPost)
-				authActionGroup.GET("/state", group.PostActionHandler.GetPostActionState)
+				authActionGroup.POST("/likes/:post_id", group.PostActionHandler.LikePost)
+				authActionGroup.POST("/collects/:post_id", group.PostActionHandler.CollectPost)
+				authActionGroup.GET("/state/:post_id", group.PostActionHandler.GetPostActionState)
 
-				authActionGroup.POST("/comment", group.PostActionHandler.CreateComment)
-				authActionGroup.DELETE("/comment/:comment_id", group.PostActionHandler.DeleteComment)
-				authActionGroup.POST("/comment/like", group.PostActionHandler.LikeComment)
+				authActionGroup.POST("/comments", group.PostActionHandler.CreateComment)
+				authActionGroup.DELETE("/comments/:comment_id", group.PostActionHandler.DeleteComment)
+				authActionGroup.POST("/comments/:comment_id/like", group.PostActionHandler.LikeComment)
 
-				authActionGroup.GET("/my/likes", group.PostActionHandler.GetUserLikes)
-				authActionGroup.GET("/my/collections", group.PostActionHandler.GetUserCollections)
+				authActionGroup.GET("/liked", group.PostActionHandler.GetUserLikes)
+				authActionGroup.GET("/collections", group.PostActionHandler.GetUserCollections)
 
-				authActionGroup.POST("/report", group.PostActionHandler.ReportPost)
+				authActionGroup.POST("/reports/:post_id", group.PostActionHandler.ReportPost)
 			}
 		}
 
@@ -163,10 +163,10 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			authGroup := imGroup.Group("")
 			authGroup.Use(middleware.AuthMiddleware())
 			{
-				authGroup.POST("/message/send", group.IMHandler.SendMessage)
-				authGroup.GET("/message/history", group.IMHandler.GetChatHistory)
-				authGroup.GET("/conversations", group.IMHandler.GetConversationList)
-				authGroup.POST("/message/read", group.IMHandler.MarkAsRead)
+				authGroup.POST("/send", group.IMHandler.SendMessage)
+				authGroup.GET("/history", group.IMHandler.GetChatHistory)
+				authGroup.GET("/list", group.IMHandler.GetConversationList)
+				authGroup.POST("/read", group.IMHandler.MarkAsRead)
 			}
 		}
 
@@ -181,6 +181,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 
 		mediaGroup := apiGroup.Group("/media")
 		{
+			mediaGroup.Use(middleware.AuthMiddleware())
 			mediaGroup.POST("/upload", group.MediaHandler.Upload)
 		}
 	}

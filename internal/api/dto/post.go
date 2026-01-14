@@ -29,7 +29,7 @@ type PostWaterfallDTO struct {
 type PostBaseDTO struct {
 	Title   string           `json:"title" binding:"required" validate:"min=1,max=255"`
 	Content string           `json:"content" binding:"required" validate:"min=1,max=1000"`
-	Medias  []*MediasBaseDTO `json:"Medias" validate:"max=9"`
+	Medias  []*MediasBaseDTO `json:"medias" validate:"max=9"`
 }
 
 // MediasBaseDTO 媒体 - 基础
@@ -38,7 +38,7 @@ type MediasBaseDTO struct {
 	MediaURL string  `json:"url" binding:"required" validate:"min=1,max=512"`
 	Width    int     `json:"width" binding:"required" validate:"min=1"`
 	Height   int     `json:"height" binding:"required" validate:"min=1"`
-	Duration int     `json:"duration"`
+	Duration float64 `json:"duration"`
 	CoverURL *string `json:"cover_url,omitempty"`
 }
 
@@ -50,4 +50,8 @@ type PostListDTO struct {
 
 type PostDeleteDTO struct {
 	ID uint64 `json:"id" binding:"required"`
+}
+
+type PostUpdateDTO struct {
+	Status int `json:"status" binding:"required" validate:"oneof=0 1 2"`
 }

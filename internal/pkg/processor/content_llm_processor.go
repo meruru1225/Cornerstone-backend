@@ -46,6 +46,8 @@ func (s *contentLLMProcessorImpl) Process(ctx context.Context, title, content st
 		StopChan: make(chan struct{}),
 	}
 
+	log.InfoContext(ctx, "ContentLLMProcessor started", "media_count", len(media), "audit_only", auditOnly)
+
 	gCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
 
@@ -76,7 +78,12 @@ func (s *contentLLMProcessorImpl) Process(ctx context.Context, title, content st
 
 	select {
 	case err := <-waitDone:
-		if err != nil && !errors.Is(err, ErrAuditDenyTriggered) {
+		if err != nil {
+			if errors.Is(err, ErrAuditDenyTriggered) {
+				log.InfoContext(ctx, "process finished with audit deny")
+				return res, nil
+			}
+			log.ErrorContext(ctx, "ContentLLMProcessor wait error", "err", err)
 			return nil, err
 		}
 	case <-res.StopChan:
@@ -129,6 +136,11 @@ func (s *contentLLMProcessorImpl) collectAllFeatures(ctx context.Context, media 
 				res.Unlock()
 				return nil
 			case consts.MimePrefixVideo:
+				if m.Cover != nil && *m.Cover != "" {
+					res.Lock()
+					res.allPendingUrls = append(res.allPendingUrls, minio.GetForcePublicURL(*m.Cover))
+					res.Unlock()
+				}
 				return s.processVideoItem(gCtx, g, m, res, cancel, auditOnly)
 			case consts.MimePrefixAudio:
 				return s.processAudioItem(gCtx, g, m, res, cancel, auditOnly)

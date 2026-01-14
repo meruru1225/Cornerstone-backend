@@ -60,7 +60,7 @@ func (s *UserHandler) SendSmsCode(c *gin.Context) {
 	}
 	phone := req.Phone
 	if !util.ValidatePhone(phone) {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	err = s.smsSvc.SendSms(c.Request.Context(), phone)
@@ -79,7 +79,7 @@ func (s *UserHandler) Login(c *gin.Context) {
 		return
 	}
 	if !util.ValidateLoginDTO(&loginDTO) {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	token, err := s.userSvc.Login(c.Request.Context(), &loginDTO, true)
@@ -312,7 +312,7 @@ func (s *UserHandler) GetUserByCondition(c *gin.Context) {
 		conditionDTO.PageSize = 20
 	}
 	if conditionDTO.ID == nil && conditionDTO.Phone == nil && conditionDTO.Username == nil && conditionDTO.Nickname == nil {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	users, err := s.userSvc.GetUserByCondition(c.Request.Context(), &conditionDTO)
@@ -392,7 +392,7 @@ func (s *UserHandler) GetUserSimpleInfoById(c *gin.Context) {
 		return
 	}
 	if len(user) == 0 {
-		response.Fail(c, response.NotFound, service.ErrUserNotFound.Error())
+		response.Error(c, service.ErrUserNotFound)
 		return
 	}
 	response.Success(c, user[0])
@@ -401,7 +401,7 @@ func (s *UserHandler) GetUserSimpleInfoById(c *gin.Context) {
 func (s *UserHandler) GetUserSimpleInfoByIds(c *gin.Context) {
 	query := c.Query("user_ids")
 	if query == "" {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 	query = query[1 : len(query)-1]
@@ -427,7 +427,7 @@ func (s *UserHandler) UploadAvatar(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	file, err := c.FormFile("file")
 	if err != nil || file == nil {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 
