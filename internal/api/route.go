@@ -83,12 +83,12 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			userFollowGroup.Use(middleware.AuthMiddleware())
 			{
 				userFollowGroup.GET("/followers", group.UserFollowHandler.GetUserFollowers)
-				userFollowGroup.GET("/followersCount", group.UserFollowHandler.GetUserFollowersCount)
+				userFollowGroup.GET("/followers/count", group.UserFollowHandler.GetUserFollowersCount)
 				userFollowGroup.GET("/followings", group.UserFollowHandler.GetUserFollowings)
-				userFollowGroup.GET("/followingsCount", group.UserFollowHandler.GetUserFollowingCount)
-				userFollowGroup.GET("/isFollow/:following_id", group.UserFollowHandler.GetSomeoneIsFollowing)
-				userFollowGroup.POST("/followUser", group.UserFollowHandler.Follow)
-				userFollowGroup.DELETE("/followUser", group.UserFollowHandler.Unfollow)
+				userFollowGroup.GET("/followings/count", group.UserFollowHandler.GetUserFollowingCount)
+				userFollowGroup.GET("/isfollow/:following_id", group.UserFollowHandler.GetSomeoneIsFollowing)
+				userFollowGroup.POST("/follow/:following_id", group.UserFollowHandler.Follow)
+				userFollowGroup.DELETE("/follow/:following_id", group.UserFollowHandler.Unfollow)
 			}
 		}
 
@@ -96,12 +96,12 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 		{
 			metricsGroup.Use(middleware.AuthMiddleware())
 			{
-				metricsGroup.GET("/user-7d", group.UserMetricHandler.GetMetrics7Days)
-				metricsGroup.GET("/user-30d", group.UserMetricHandler.GetMetrics30Days)
-				metricsGroup.GET("/user-content-7d", group.UserContentMetricHandler.GetMetrics7Days)
-				metricsGroup.GET("/user-content-30d", group.UserContentMetricHandler.GetMetrics30Days)
-				metricsGroup.GET("/post-7d/:post_id", group.PostMetricHandler.GetMetrics7Days)
-				metricsGroup.GET("/post-30d/:post_id", group.PostMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/user/7d", group.UserMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/user/30d", group.UserMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/user-content/7d", group.UserContentMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/user-content/30d", group.UserContentMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/post/7d/:post_id", group.PostMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/post/30d/:post_id", group.PostMetricHandler.GetMetrics30Days)
 			}
 		}
 

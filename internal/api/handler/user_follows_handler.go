@@ -87,9 +87,10 @@ func (s *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 
 func (s *UserFollowHandler) Follow(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	followingId, err := s.getFollowingId(c)
+	followingIdStr := c.Param("following_id")
+	followingId, err := strconv.ParseUint(followingIdStr, 10, 64)
 	if err != nil {
-		response.Error(c, err)
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
 		return
 	}
 	err = s.userFollowSvc.CreateUserFollow(c, &model.UserFollow{
@@ -105,9 +106,10 @@ func (s *UserFollowHandler) Follow(c *gin.Context) {
 
 func (s *UserFollowHandler) Unfollow(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	followingId, err := s.getFollowingId(c)
+	followingIdStr := c.Param("following_id")
+	followingId, err := strconv.ParseUint(followingIdStr, 10, 64)
 	if err != nil {
-		response.Error(c, err)
+		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
 		return
 	}
 	err = s.userFollowSvc.DeleteUserFollow(c, &model.UserFollow{
@@ -121,44 +123,17 @@ func (s *UserFollowHandler) Unfollow(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-func (s *UserFollowHandler) getFollowingId(c *gin.Context) (uint64, error) {
-	var body map[string]interface{}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		return 0, service.ErrParamInvalid
-	}
-
-	val, ok := body["following_id"]
-	if !ok {
-		return 0, service.ErrParamInvalid
-	}
-
-	var followingId uint64
-	switch v := val.(type) {
-	case float64:
-		followingId = uint64(v)
-	case string:
-		id, err := strconv.ParseUint(v, 10, 64)
-		if err != nil {
-			return 0, service.ErrParamInvalid
-		}
-		followingId = id
-	default:
-		return 0, service.ErrParamInvalid
-	}
-	return followingId, nil
-}
-
 func (s *UserFollowHandler) getPagination(c *gin.Context) (int, int) {
-	limitStr := c.DefaultQuery("limit", "10")
-	offsetStr := c.DefaultQuery("offset", "0")
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "10")
 
-	limit, err := strconv.Atoi(limitStr)
+	page, err := strconv.Atoi(pageStr)
 	if err != nil {
-		limit = 10
+		page = 1
 	}
-	offset, err := strconv.Atoi(offsetStr)
+	pageSize, err := strconv.Atoi(pageSizeStr)
 	if err != nil {
-		offset = 0
+		pageSize = 10
 	}
-	return limit, offset
+	return page, pageSize
 }

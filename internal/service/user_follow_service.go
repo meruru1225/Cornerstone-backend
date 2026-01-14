@@ -16,8 +16,8 @@ const MaxCacheSize = 1000
 const MaxFollowingCount = 1000
 
 type UserFollowService interface {
-	GetUserFollowers(ctx context.Context, userId uint64, limit, offset int) ([]*model.UserFollow, error)
-	GetUserFollowing(ctx context.Context, userId uint64, limit, offset int) ([]*model.UserFollow, error)
+	GetUserFollowers(ctx context.Context, userId uint64, page, pageSize int) ([]*model.UserFollow, error)
+	GetUserFollowing(ctx context.Context, userId uint64, page, pageSize int) ([]*model.UserFollow, error)
 	GetUserFollowerCount(ctx context.Context, userId uint64) (int64, error)
 	GetUserFollowingCount(ctx context.Context, userId uint64) (int64, error)
 	GetSomeoneIsFollowing(ctx context.Context, userId, followingId uint64) (bool, error)
@@ -40,18 +40,18 @@ func NewUserFollowService(userRepo repository.UserRepo, userFollowRepo repositor
 type fetchListFunc func(ctx context.Context, userId uint64, limit, offset int) ([]*model.UserFollow, error)
 type fetchCountFunc func(ctx context.Context, userId uint64) (int64, error)
 
-func (s *UserFollowServiceImpl) GetUserFollowers(ctx context.Context, userId uint64, limit, offset int) ([]*model.UserFollow, error) {
+func (s *UserFollowServiceImpl) GetUserFollowers(ctx context.Context, userId uint64, page, pageSize int) ([]*model.UserFollow, error) {
 	return s.getFollowListCommon(
-		ctx, userId, limit, offset,
+		ctx, userId, page, pageSize,
 		consts.UserFollowerKey,
 		true,
 		s.userFollowRepo.GetUserFollowers,
 	)
 }
 
-func (s *UserFollowServiceImpl) GetUserFollowing(ctx context.Context, userId uint64, limit, offset int) ([]*model.UserFollow, error) {
+func (s *UserFollowServiceImpl) GetUserFollowing(ctx context.Context, userId uint64, page, pageSize int) ([]*model.UserFollow, error) {
 	return s.getFollowListCommon(
-		ctx, userId, limit, offset,
+		ctx, userId, page, pageSize,
 		consts.UserFollowingKey,
 		false,
 		s.userFollowRepo.GetUserFollowing,
@@ -140,11 +140,14 @@ func (s *UserFollowServiceImpl) DeleteUserFollow(ctx context.Context, userFollow
 func (s *UserFollowServiceImpl) getFollowListCommon(
 	ctx context.Context,
 	userId uint64,
-	limit, offset int,
+	page, pageSize int,
 	keyPrefix string,
 	isFollowerList bool,
 	fetchDB fetchListFunc,
 ) ([]*model.UserFollow, error) {
+	offset := (page - 1) * pageSize
+	limit := pageSize
+
 	if offset+limit > MaxCacheSize {
 		return fetchDB(ctx, userId, limit, offset)
 	}
@@ -166,7 +169,9 @@ func (s *UserFollowServiceImpl) getFollowListCommon(
 	}
 
 	go func(data []*model.UserFollow, cacheKey string, isFollower bool) {
-		_ = redis.DeleteKey(context.Background(), cacheKey) // 使用 Background context 防止 cancel
+		bgCtx := context.Background()
+		_ = redis.DeleteKey(bgCtx, cacheKey)
+
 		pipe := rdb.Pipeline()
 		zMembers := make([]redisv9.Z, 0, len(data))
 
@@ -181,9 +186,9 @@ func (s *UserFollowServiceImpl) getFollowListCommon(
 				Member: memberID,
 			})
 		}
-		pipe.ZAdd(context.Background(), cacheKey, zMembers...)
-		pipe.Expire(context.Background(), cacheKey, time.Hour*1)
-		_, _ = pipe.Exec(context.Background())
+		pipe.ZAdd(bgCtx, cacheKey, zMembers...)
+		pipe.Expire(bgCtx, cacheKey, time.Hour*1)
+		_, _ = pipe.Exec(bgCtx)
 	}(dbData, key, isFollowerList)
 
 	start := offset
