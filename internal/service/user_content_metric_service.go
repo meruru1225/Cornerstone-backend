@@ -73,7 +73,15 @@ func (s *userContentServiceImpl) SyncUserContentMetric(ctx context.Context, user
 		TotalViews:    int(views),
 	}
 
-	return s.userContentMetricRepo.SaveOrUpdateMetric(ctx, metric)
+	err = s.userContentMetricRepo.SaveOrUpdateMetric(ctx, metric)
+	if err != nil {
+		return err
+	}
+
+	_ = redis.DeleteKey(ctx, consts.UserContentMetrics7DaysKey+strconv.FormatUint(userID, 10))
+	_ = redis.DeleteKey(ctx, consts.UserContentMetrics30DaysKey+strconv.FormatUint(userID, 10))
+
+	return nil
 }
 
 func (s *userContentServiceImpl) GetUserContentMetricsBy7Days(ctx context.Context, userID uint64) (*dto.UserContentTrendDTO, error) {

@@ -18,9 +18,9 @@ type PostMetricService interface {
 	// SyncPostMetric 同步帖子每日指标快照
 	SyncPostMetric(ctx context.Context, postID uint64) error
 	// GetPostMetricsBy7Days 获取最近7天全维度趋势数据
-	GetPostMetricsBy7Days(ctx context.Context, postID uint64) (*dto.PostTrendDTO, error)
+	GetPostMetricsBy7Days(ctx context.Context, postID uint64, userID uint64) (*dto.PostTrendDTO, error)
 	// GetPostMetricsBy30Days 获取最近30天全维度趋势数据
-	GetPostMetricsBy30Days(ctx context.Context, postID uint64) (*dto.PostTrendDTO, error)
+	GetPostMetricsBy30Days(ctx context.Context, postID uint64, userID uint64) (*dto.PostTrendDTO, error)
 }
 
 type postMetricServiceImpl struct {
@@ -52,19 +52,27 @@ func (s *postMetricServiceImpl) SyncPostMetric(ctx context.Context, postID uint6
 		TotalViews:    post.ViewsCount,
 	}
 
-	return s.postMetricRepo.SaveOrUpdateMetric(ctx, metric)
+	err = s.postMetricRepo.SaveOrUpdateMetric(ctx, metric)
+	if err != nil {
+		return err
+	}
+
+	_ = redis.DeleteKey(ctx, consts.PostMetrics7DaysKey+strconv.FormatUint(postID, 10))
+	_ = redis.DeleteKey(ctx, consts.PostMetrics30DaysKey+strconv.FormatUint(postID, 10))
+
+	return nil
 }
 
-func (s *postMetricServiceImpl) GetPostMetricsBy7Days(ctx context.Context, postID uint64) (*dto.PostTrendDTO, error) {
+func (s *postMetricServiceImpl) GetPostMetricsBy7Days(ctx context.Context, postID uint64, userID uint64) (*dto.PostTrendDTO, error) {
 	key := consts.PostMetrics7DaysKey + strconv.FormatUint(postID, 10)
-	return s.getPostMetrics(ctx, postID, key, 7, func() ([]*model.PostMetric, error) {
+	return s.getPostMetrics(ctx, postID, userID, key, 7, func() ([]*model.PostMetric, error) {
 		return s.postMetricRepo.GetPostMetricsBy7Days(ctx, postID)
 	})
 }
 
-func (s *postMetricServiceImpl) GetPostMetricsBy30Days(ctx context.Context, postID uint64) (*dto.PostTrendDTO, error) {
+func (s *postMetricServiceImpl) GetPostMetricsBy30Days(ctx context.Context, postID uint64, userID uint64) (*dto.PostTrendDTO, error) {
 	key := consts.PostMetrics30DaysKey + strconv.FormatUint(postID, 10)
-	return s.getPostMetrics(ctx, postID, key, 30, func() ([]*model.PostMetric, error) {
+	return s.getPostMetrics(ctx, postID, userID, key, 30, func() ([]*model.PostMetric, error) {
 		return s.postMetricRepo.GetPostMetricsBy30Days(ctx, postID)
 	})
 }
@@ -73,10 +81,22 @@ func (s *postMetricServiceImpl) GetPostMetricsBy30Days(ctx context.Context, post
 func (s *postMetricServiceImpl) getPostMetrics(
 	ctx context.Context,
 	postID uint64,
+	userID uint64,
 	key string,
 	days int,
 	fetchDB func() ([]*model.PostMetric, error),
 ) (*dto.PostTrendDTO, error) {
+	post, err := s.postRepo.GetPost(ctx, postID)
+	if err != nil {
+		return nil, err
+	}
+	if post == nil {
+		return nil, ErrPostNotFound
+	}
+	if post.UserID != userID {
+		return nil, UnauthorizedError
+	}
+
 	if val, err := redis.GetValue(ctx, key); err == nil && val != "" {
 		var res dto.PostTrendDTO
 		_ = json.Unmarshal([]byte(val), &res)

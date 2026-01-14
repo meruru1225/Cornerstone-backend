@@ -45,7 +45,14 @@ func (s *userMetricsServiceImpl) SyncUserDailyMetric(ctx context.Context, userID
 		MetricDate:     today,
 	}
 
-	return s.userMetricsRepo.SaveOrUpdateMetric(ctx, metric)
+	err = s.userMetricsRepo.SaveOrUpdateMetric(ctx, metric)
+	if err != nil {
+		return err
+	}
+
+	_ = redis.DeleteKey(ctx, consts.UserMetrics7DaysKey+strconv.FormatUint(userID, 10))
+	_ = redis.DeleteKey(ctx, consts.UserMetrics30DaysKey+strconv.FormatUint(userID, 10))
+	return nil
 }
 
 func (s *userMetricsServiceImpl) GetUserMetricsBy7Days(ctx context.Context, userID uint64) ([]*dto.UserMetricDTO, error) {

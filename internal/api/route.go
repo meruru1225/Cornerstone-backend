@@ -100,8 +100,8 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				metricsGroup.GET("/user-30d", group.UserMetricHandler.GetMetrics30Days)
 				metricsGroup.GET("/user-content-7d", group.UserContentMetricHandler.GetMetrics7Days)
 				metricsGroup.GET("/user-content-30d", group.UserContentMetricHandler.GetMetrics30Days)
-				metricsGroup.GET("/post-7d", group.PostMetricHandler.GetMetrics7Days)
-				metricsGroup.GET("/post-30d", group.PostMetricHandler.GetMetrics30Days)
+				metricsGroup.GET("/post-7d/:post_id", group.PostMetricHandler.GetMetrics7Days)
+				metricsGroup.GET("/post-30d/:post_id", group.PostMetricHandler.GetMetrics30Days)
 			}
 		}
 

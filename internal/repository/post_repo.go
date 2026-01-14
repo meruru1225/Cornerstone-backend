@@ -3,6 +3,7 @@ package repository
 import (
 	"Cornerstone/internal/model"
 	"context"
+	"errors"
 
 	"gorm.io/gorm"
 	"gorm.io/gorm/clause"
@@ -49,12 +50,16 @@ func (s *PostRepoImpl) GetPost(ctx context.Context, id uint64) (*model.Post, err
 		Preload("User.UserDetail", func(db *gorm.DB) *gorm.DB {
 			return db.Select("user_id", "nickname", "avatar_url")
 		}).
-		Where("id IN ? AND is_deleted = ? AND status = ?", id, false, 1).
+		Where("id = ? AND is_deleted = ? AND status = ?", id, false, 1).
 		First(&post).Error
 
 	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return nil, nil
+		}
 		return nil, err
 	}
+
 	return &post, nil
 }
 
