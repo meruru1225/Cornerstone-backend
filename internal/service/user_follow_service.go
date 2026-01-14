@@ -26,11 +26,15 @@ type UserFollowService interface {
 }
 
 type UserFollowServiceImpl struct {
+	userRepo       repository.UserRepo
 	userFollowRepo repository.UserFollowRepo
 }
 
-func NewUserFollowService(userFollowRepo repository.UserFollowRepo) UserFollowService {
-	return &UserFollowServiceImpl{userFollowRepo: userFollowRepo}
+func NewUserFollowService(userRepo repository.UserRepo, userFollowRepo repository.UserFollowRepo) UserFollowService {
+	return &UserFollowServiceImpl{
+		userRepo:       userRepo,
+		userFollowRepo: userFollowRepo,
+	}
 }
 
 type fetchListFunc func(ctx context.Context, userId uint64, limit, offset int) ([]*model.UserFollow, error)
@@ -90,6 +94,14 @@ func (s *UserFollowServiceImpl) GetSomeoneIsFollowing(ctx context.Context, userI
 func (s *UserFollowServiceImpl) CreateUserFollow(ctx context.Context, userFollow *model.UserFollow) error {
 	if userFollow.FollowerID == userFollow.FollowingID {
 		return ErrUserFollowSelf
+	}
+
+	user, err := s.userRepo.GetUserById(ctx, userFollow.FollowingID)
+	if err != nil {
+		return err
+	}
+	if user == nil {
+		return ErrUserNotFound
 	}
 
 	count, err := s.GetUserFollowingCount(ctx, userFollow.FollowerID)

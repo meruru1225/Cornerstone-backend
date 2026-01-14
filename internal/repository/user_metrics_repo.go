@@ -28,7 +28,7 @@ func NewUserMetricsRepository(db *gorm.DB) UserMetricsRepo {
 func (s *userMetricsRepoImpl) SaveOrUpdateMetric(ctx context.Context, metric *model.UserMetrics) error {
 	return s.db.WithContext(ctx).Clauses(clause.OnConflict{
 		Columns:   []clause.Column{{Name: "user_id"}, {Name: "metric_date"}},
-		DoUpdates: clause.AssignmentColumns([]string{"total_followers", "updated_at"}),
+		DoUpdates: clause.AssignmentColumns([]string{"total_followers"}),
 	}).Create(metric).Error
 }
 

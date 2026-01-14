@@ -86,7 +86,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				userFollowGroup.GET("/followersCount", group.UserFollowHandler.GetUserFollowersCount)
 				userFollowGroup.GET("/followings", group.UserFollowHandler.GetUserFollowings)
 				userFollowGroup.GET("/followingsCount", group.UserFollowHandler.GetUserFollowingCount)
-				userFollowGroup.GET("/isFollow", group.UserFollowHandler.GetSomeoneIsFollowing)
+				userFollowGroup.GET("/isFollow/:following_id", group.UserFollowHandler.GetSomeoneIsFollowing)
 				userFollowGroup.POST("/followUser", group.UserFollowHandler.Follow)
 				userFollowGroup.DELETE("/followUser", group.UserFollowHandler.Unfollow)
 			}

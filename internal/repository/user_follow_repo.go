@@ -6,6 +6,7 @@ import (
 	"errors"
 
 	"gorm.io/gorm"
+	"gorm.io/gorm/clause"
 )
 
 type UserFollowRepo interface {
@@ -104,7 +105,11 @@ func (s *UserFollowRepoImpl) GetUserFollow(ctx context.Context, userID uint64, f
 
 // CreateUserFollow 创建用户的关注关系
 func (s *UserFollowRepoImpl) CreateUserFollow(ctx context.Context, userFollow *model.UserFollow) error {
-	return s.db.WithContext(ctx).Create(userFollow).Error
+	return s.db.WithContext(ctx).
+		Clauses(clause.OnConflict{
+			DoNothing: true,
+		}).
+		Create(userFollow).Error
 }
 
 // DeleteUserFollow 删除用户的关注关系

@@ -176,9 +176,9 @@ func (s *UserRepoImpl) UpdateUserDetail(ctx context.Context, detail *model.UserD
 }
 
 func (s *UserRepoImpl) UpdateUserFollowCount(ctx context.Context, id uint64, followerCount int64, followingCount int64) error {
-	result := s.db.WithContext(ctx).Model(&model.User{}).Where("id = ?", id).Updates(map[string]interface{}{
-		"follower_count":  gorm.Expr("follower_count = ?", followerCount),
-		"following_count": gorm.Expr("following_count = ?", followingCount),
+	result := s.db.WithContext(ctx).Model(&model.UserDetail{}).Where("user_id = ?", id).Updates(map[string]interface{}{
+		"followers_count": followerCount,
+		"following_count": followingCount,
 	})
 	if result.Error != nil {
 		return result.Error

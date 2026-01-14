@@ -62,7 +62,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	// Service 实例
 	userService := service.NewUserService(userRepo, roleRepo, userRolesRepo, userESRepo)
 	userRolesService := service.NewUserRolesService(userRolesRepo)
-	userFollowService := service.NewUserFollowService(userFollowRepo)
+	userFollowService := service.NewUserFollowService(userRepo, userFollowRepo)
 	userMetricsService := service.NewUserMetricsService(userMetricsRepo, userFollowRepo)
 	userContentMetricsService := service.NewUserContentMetricService(userContentMetricsRepo, postRepo, postActionRepo)
 	smsService := service.NewSmsService()

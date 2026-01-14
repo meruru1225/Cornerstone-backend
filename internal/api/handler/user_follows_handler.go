@@ -17,12 +17,12 @@ func NewUserFollowHandler(userFollowSvc service.UserFollowService) *UserFollowHa
 	return &UserFollowHandler{userFollowSvc: userFollowSvc}
 }
 
-func (h *UserFollowHandler) GetUserFollowers(c *gin.Context) {
+func (s *UserFollowHandler) GetUserFollowers(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 
-	limit, offset := h.getPagination(c)
+	limit, offset := s.getPagination(c)
 
-	followers, err := h.userFollowSvc.GetUserFollowers(c, userId, limit, offset)
+	followers, err := s.userFollowSvc.GetUserFollowers(c, userId, limit, offset)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -30,12 +30,12 @@ func (h *UserFollowHandler) GetUserFollowers(c *gin.Context) {
 	response.Success(c, followers)
 }
 
-func (h *UserFollowHandler) GetUserFollowings(c *gin.Context) {
+func (s *UserFollowHandler) GetUserFollowings(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 
-	limit, offset := h.getPagination(c)
+	limit, offset := s.getPagination(c)
 
-	followings, err := h.userFollowSvc.GetUserFollowing(c, userId, limit, offset)
+	followings, err := s.userFollowSvc.GetUserFollowing(c, userId, limit, offset)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -43,9 +43,9 @@ func (h *UserFollowHandler) GetUserFollowings(c *gin.Context) {
 	response.Success(c, followings)
 }
 
-func (h *UserFollowHandler) GetUserFollowersCount(c *gin.Context) {
+func (s *UserFollowHandler) GetUserFollowersCount(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	count, err := h.userFollowSvc.GetUserFollowerCount(c, userId)
+	count, err := s.userFollowSvc.GetUserFollowerCount(c, userId)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -53,9 +53,9 @@ func (h *UserFollowHandler) GetUserFollowersCount(c *gin.Context) {
 	response.Success(c, map[string]int64{"count": count})
 }
 
-func (h *UserFollowHandler) GetUserFollowingCount(c *gin.Context) {
+func (s *UserFollowHandler) GetUserFollowingCount(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	count, err := h.userFollowSvc.GetUserFollowingCount(c, userId)
+	count, err := s.userFollowSvc.GetUserFollowingCount(c, userId)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -63,9 +63,9 @@ func (h *UserFollowHandler) GetUserFollowingCount(c *gin.Context) {
 	response.Success(c, map[string]int64{"count": count})
 }
 
-func (h *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
+func (s *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	followingIdStr := c.Query("following_id")
+	followingIdStr := c.Param("following_id")
 
 	if followingIdStr == "" {
 		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
@@ -77,7 +77,7 @@ func (h *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
 		return
 	}
-	userFollow, err := h.userFollowSvc.GetSomeoneIsFollowing(c, userId, followingId)
+	userFollow, err := s.userFollowSvc.GetSomeoneIsFollowing(c, userId, followingId)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -85,14 +85,14 @@ func (h *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 	response.Success(c, userFollow)
 }
 
-func (h *UserFollowHandler) Follow(c *gin.Context) {
+func (s *UserFollowHandler) Follow(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	followingId, err := h.getFollowingId(c)
+	followingId, err := s.getFollowingId(c)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	err = h.userFollowSvc.CreateUserFollow(c, &model.UserFollow{
+	err = s.userFollowSvc.CreateUserFollow(c, &model.UserFollow{
 		FollowerID:  userId,
 		FollowingID: followingId,
 	})
@@ -103,14 +103,14 @@ func (h *UserFollowHandler) Follow(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-func (h *UserFollowHandler) Unfollow(c *gin.Context) {
+func (s *UserFollowHandler) Unfollow(c *gin.Context) {
 	userId := c.GetUint64("user_id")
-	followingId, err := h.getFollowingId(c)
+	followingId, err := s.getFollowingId(c)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
-	err = h.userFollowSvc.DeleteUserFollow(c, &model.UserFollow{
+	err = s.userFollowSvc.DeleteUserFollow(c, &model.UserFollow{
 		FollowerID:  userId,
 		FollowingID: followingId,
 	})
@@ -121,7 +121,7 @@ func (h *UserFollowHandler) Unfollow(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-func (h *UserFollowHandler) getFollowingId(c *gin.Context) (uint64, error) {
+func (s *UserFollowHandler) getFollowingId(c *gin.Context) (uint64, error) {
 	var body map[string]interface{}
 	if err := c.ShouldBindJSON(&body); err != nil {
 		return 0, service.ErrParamInvalid
@@ -148,7 +148,7 @@ func (h *UserFollowHandler) getFollowingId(c *gin.Context) (uint64, error) {
 	return followingId, nil
 }
 
-func (h *UserFollowHandler) getPagination(c *gin.Context) (int, int) {
+func (s *UserFollowHandler) getPagination(c *gin.Context) (int, int) {
 	limitStr := c.DefaultQuery("limit", "10")
 	offsetStr := c.DefaultQuery("offset", "0")
 
