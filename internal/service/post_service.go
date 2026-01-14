@@ -155,6 +155,9 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 			return err
 		}
 		hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
+		if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
+			hdelKeys = append(hdelKeys, *mediaDTO.CoverURL)
+		}
 	}
 
 	post := &model.Post{}
