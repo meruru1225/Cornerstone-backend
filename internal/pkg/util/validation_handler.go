@@ -38,23 +38,31 @@ func ValidateDTO(dto any) error {
 	return nil
 }
 
-func ValidateRegDTO(dto *dto.RegisterDTO) bool {
+func ValidateRegDTO(dto *dto.RegisterDTO) error {
+	var vErrs validator.ValidationErrors
 	if dto.Username != nil && dto.Password != nil {
 		if len(*dto.Username) < 4 || len(*dto.Password) < 6 {
-			return false
+			return &ValidationErrorWrapper{
+				Message: "用户名或密码长度错误",
+				Raw:     vErrs,
+			}
 		}
 		if len(*dto.Username) > 20 || len(*dto.Password) > 20 {
-			return false
+			return &ValidationErrorWrapper{
+				Message: "用户名或密码长度错误",
+				Raw:     vErrs,
+			}
 		}
-		return true
 	}
 	if dto.Phone != nil {
 		if len(*dto.Phone) != 11 || len(*dto.PhoneToken) == 0 {
-			return false
+			return &ValidationErrorWrapper{
+				Message: "手机号或验证码错误",
+				Raw:     vErrs,
+			}
 		}
-		return true
 	}
-	return false
+	return ValidateDTO(dto)
 }
 
 func ValidateLoginDTO(dto *dto.CredentialDTO) bool {

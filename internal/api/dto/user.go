@@ -39,7 +39,7 @@ type RegisterDTO struct {
 	Bio      *string `json:"bio"`
 	Gender   uint8   `json:"gender"`
 	Region   *string `json:"region"`
-	Birthday string  `json:"birthday" validate:"required"`
+	Birthday string  `json:"birthday" validate:"required,datetime=2006-01-02"`
 }
 
 // ForgetPasswordDTO 忘记密码

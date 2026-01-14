@@ -39,8 +39,8 @@ func (s *UserHandler) Register(c *gin.Context) {
 		response.Error(c, err)
 		return
 	}
-	if !util.ValidateRegDTO(&registerDTO) {
-		response.Fail(c, response.BadRequest, service.ErrParamInvalid.Error())
+	if err = util.ValidateRegDTO(&registerDTO); err != nil {
+		response.Error(c, err)
 		return
 	}
 	err = s.userSvc.Register(c.Request.Context(), &registerDTO)
