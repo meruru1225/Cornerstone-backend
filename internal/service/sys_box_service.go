@@ -5,8 +5,11 @@ import (
 	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/repository"
 	"context"
+	"errors"
 
 	"github.com/jinzhu/copier"
+	"go.mongodb.org/mongo-driver/bson/primitive"
+	mongoDB "go.mongodb.org/mongo-driver/mongo"
 )
 
 type SysBoxService interface {
@@ -74,6 +77,27 @@ func (s *sysBoxServiceImpl) GetUnreadCount(ctx context.Context, userID uint64) (
 
 // MarkRead 标记单条已读
 func (s *sysBoxServiceImpl) MarkRead(ctx context.Context, userID uint64, msgID string) error {
+	objectID, err := primitive.ObjectIDFromHex(msgID)
+	if err != nil {
+		return ErrParamInvalid
+	}
+
+	notice, err := s.sysBoxRepo.GetByID(ctx, objectID)
+	if err != nil {
+		if errors.Is(err, mongoDB.ErrNoDocuments) {
+			return ErrSysBoxNotFound
+		}
+		return err
+	}
+
+	if notice.ReceiverID != userID {
+		return UnauthorizedError
+	}
+
+	if notice.IsRead {
+		return nil
+	}
+
 	return s.sysBoxRepo.MarkAsRead(ctx, userID, msgID)
 }
 

@@ -34,6 +34,7 @@ var (
 	ErrPostNotFound            = errors.New("帖子不存在")
 	ErrPostCommentNotFound     = errors.New("评论不存在")
 	ErrActionDuplicate         = errors.New("重复操作")
+	ErrSysBoxNotFound          = errors.New("系统通知不存在")
 	UnauthorizedError          = errors.New("权限不足")
 	UnExpectedError            = errors.New("系统异常，请稍后重试")
 )
@@ -61,6 +62,7 @@ var ErrorMap = map[error]int{
 	ErrPostNotFound:            NotFound,
 	ErrPostCommentNotFound:     NotFound,
 	ErrActionDuplicate:         BadRequest,
+	ErrSysBoxNotFound:          NotFound,
 	UnauthorizedError:          Unauthorized,
 	UnExpectedError:            InternalServerError,
 }

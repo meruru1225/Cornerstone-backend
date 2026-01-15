@@ -20,9 +20,15 @@ func NewSysBoxHandler(s service.SysBoxService) *SysBoxHandler {
 
 // GetNotificationList 获取通知列表
 func (h *SysBoxHandler) GetNotificationList(c *gin.Context) {
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "10"))
-	userID := c.GetUint64("userID")
+	page, err := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if err != nil {
+		page = 1
+	}
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "10"))
+	if err != nil {
+		pageSize = 10
+	}
+	userID := c.GetUint64("user_id")
 
 	list, err := h.sysBoxService.GetNotificationList(c.Request.Context(), userID, page, pageSize)
 	if err != nil {
@@ -35,7 +41,7 @@ func (h *SysBoxHandler) GetNotificationList(c *gin.Context) {
 
 // GetUnreadCount 获取未读数
 func (h *SysBoxHandler) GetUnreadCount(c *gin.Context) {
-	userID := c.GetUint64("userID")
+	userID := c.GetUint64("user_id")
 
 	unread, err := h.sysBoxService.GetUnreadCount(c.Request.Context(), userID)
 	if err != nil {
@@ -49,14 +55,14 @@ func (h *SysBoxHandler) GetUnreadCount(c *gin.Context) {
 // MarkRead 标记单条已读
 func (h *SysBoxHandler) MarkRead(c *gin.Context) {
 	var req struct {
-		MsgID string `json:"msgId" binding:"required"`
+		MsgID string `json:"msg_id" binding:"required"`
 	}
 	if err := c.ShouldBindJSON(&req); err != nil {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 
-	userID := c.GetUint64("userID")
+	userID := c.GetUint64("user_id")
 	err := h.sysBoxService.MarkRead(c.Request.Context(), userID, req.MsgID)
 	if err != nil {
 		response.Error(c, err)
@@ -68,7 +74,7 @@ func (h *SysBoxHandler) MarkRead(c *gin.Context) {
 
 // MarkAllRead 一键已读
 func (h *SysBoxHandler) MarkAllRead(c *gin.Context) {
-	userID := c.GetUint64("userID")
+	userID := c.GetUint64("user_id")
 	err := h.sysBoxService.MarkAllRead(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
