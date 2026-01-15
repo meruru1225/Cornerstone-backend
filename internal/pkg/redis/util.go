@@ -28,7 +28,7 @@ func GetValue(ctx context.Context, key string) (string, error) {
 
 // TryLock 设置键值对并设置过期时间
 func TryLock(ctx context.Context, key string, value interface{}, expiration time.Duration, retryTimes int) (bool, error) {
-	for i := 0; i < retryTimes || retryTimes == -1; i++ {
+	for i := 0; i <= retryTimes || retryTimes == -1; i++ {
 		success, err := Rdb.SetNX(ctx, key, value, expiration).Result()
 		if err != nil {
 			return false, err

@@ -78,7 +78,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 		UserFollowHandler:        handler.NewUserFollowHandler(userFollowService),
 		UserMetricHandler:        handler.NewUserMetricsHandler(userMetricsService),
 		PostHandler:              handler.NewPostHandler(postService),
-		PostActionHandler:        handler.NewPostActionHandler(postActionService),
+		PostActionHandler:        handler.NewPostActionHandler(postService, postActionService),
 		PostMetricHandler:        handler.NewPostMetricHandler(postMetricsService),
 		UserContentMetricHandler: handler.NewUserContentMetricHandler(userContentMetricsService),
 		IMHandler:                handler.NewIMHandler(IMService),

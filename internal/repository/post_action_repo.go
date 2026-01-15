@@ -20,7 +20,7 @@ type PostActionRepo interface {
 
 	CreateComment(ctx context.Context, comment *model.PostComment) error
 	DeleteComment(ctx context.Context, commentID uint64) error
-	UpdateCommentStatus(ctx context.Context, commentID uint64, status bool) error
+	UpdateCommentStatus(ctx context.Context, commentID uint64, status int8) error
 	UpdateCommentLikesCount(ctx context.Context, commentID uint64, count int) error
 	GetCommentByID(ctx context.Context, commentID uint64) (*model.PostComment, error)
 	GetRootCommentsByPostID(ctx context.Context, postID uint64, limit, offset int) ([]*model.PostComment, error)
@@ -118,7 +118,7 @@ func (s *PostActionRepoImpl) DeleteComment(ctx context.Context, commentID uint64
 		Update("is_deleted", true).Error
 }
 
-func (s *PostActionRepoImpl) UpdateCommentStatus(ctx context.Context, commentID uint64, status bool) error {
+func (s *PostActionRepoImpl) UpdateCommentStatus(ctx context.Context, commentID uint64, status int8) error {
 	return s.db.WithContext(ctx).Model(&model.PostComment{}).
 		Where("id = ?", commentID).
 		Update("status", status).Error

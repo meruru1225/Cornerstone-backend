@@ -179,7 +179,7 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 	var hdelKeys []string
 
 	for _, mediaDTO := range postDTO.Medias {
-		if err := s.processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
+		if err := processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
 			return err
 		}
 	}
@@ -211,6 +211,9 @@ func (s *postServiceImpl) GetPostById(ctx context.Context, postID uint64) (*dto.
 	post, err := s.postDBRepo.GetPost(ctx, postID)
 	if err != nil {
 		return nil, err
+	}
+	if post == nil {
+		return nil, ErrPostNotFound
 	}
 	return s.toPostDTO(post)
 }
@@ -347,7 +350,7 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		}
 
 		if !isAlreadyInOld {
-			if err = s.processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
+			if err = processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
 				return err
 			}
 		}
@@ -548,7 +551,7 @@ func (s *postServiceImpl) batchToPostDTOByES(posts []*es.PostES) ([]*dto.PostDTO
 	return out, nil
 }
 
-func (s *postServiceImpl) getCover(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
+func getCover(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
 	if strings.HasPrefix(mediaDTO.MimeType, "video") &&
 		mediaDTO.CoverURL == nil {
 		stream, err := util.GetCover(ctx, minio.GetPublicURL(mediaDTO.MediaURL))
@@ -566,20 +569,6 @@ func (s *postServiceImpl) getCover(ctx context.Context, mediaDTO *dto.MediasBase
 			return err
 		}
 		mediaDTO.CoverURL = &fileKey
-	}
-	return nil
-}
-
-func (s *postServiceImpl) processMedia(ctx context.Context, mediaDTO *dto.MediasBaseDTO, hdelKeys *[]string) error {
-	if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
-		return err
-	}
-	if err := s.getCover(ctx, mediaDTO); err != nil {
-		return err
-	}
-	*hdelKeys = append(*hdelKeys, mediaDTO.MediaURL)
-	if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
-		*hdelKeys = append(*hdelKeys, *mediaDTO.CoverURL)
 	}
 	return nil
 }
@@ -602,6 +591,20 @@ func verifyAndFillMediaMeta(ctx context.Context, mediaDTO *dto.MediasBaseDTO) er
 	mediaDTO.Duration = meta.Duration
 	mediaDTO.MimeType = meta.MimeType
 
+	return nil
+}
+
+func processMedia(ctx context.Context, mediaDTO *dto.MediasBaseDTO, hdelKeys *[]string) error {
+	if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+		return err
+	}
+	if err := getCover(ctx, mediaDTO); err != nil {
+		return err
+	}
+	*hdelKeys = append(*hdelKeys, mediaDTO.MediaURL)
+	if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
+		*hdelKeys = append(*hdelKeys, *mediaDTO.CoverURL)
+	}
 	return nil
 }
 

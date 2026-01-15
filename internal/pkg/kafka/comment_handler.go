@@ -102,15 +102,14 @@ func (s *CommentsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage
 
 	finalStatus := atomic.LoadInt32(&res.MaxStatus)
 
-	return s.handleAuditResult(ctx, commentModel, int(finalStatus))
+	return s.handleAuditResult(ctx, commentModel, int8(finalStatus))
 }
 
 // handleAuditResult 处理审核结果
-func (s *CommentsHandler) handleAuditResult(ctx context.Context, m *model.PostComment, status int) error {
-	pass := status != int(llm.ContentSafeDeny)
-	_ = s.postActionRepo.UpdateCommentStatus(ctx, m.ID, pass)
+func (s *CommentsHandler) handleAuditResult(ctx context.Context, m *model.PostComment, status int8) error {
+	_ = s.postActionRepo.UpdateCommentStatus(ctx, m.ID, status)
 
-	if pass {
+	if status == llm.ContentSafePass {
 		ExecAction(ctx, ActionParams{
 			TargetID:       m.PostID,
 			CountKeyPrefix: consts.PostCommentKey,

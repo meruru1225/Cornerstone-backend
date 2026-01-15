@@ -149,59 +149,58 @@ func (s *postActionServiceImpl) IsCollected(ctx context.Context, userID, postID 
 }
 
 func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64, req *dto.CommentCreateDTO) error {
+	post, err := s.postRepo.GetPost(ctx, req.PostID)
+	if err != nil || post == nil {
+		return ErrPostNotFound
+	}
+
 	var hdelKeys []string
 
 	for _, mediaDTO := range req.MediaInfo {
-		if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+		if err := processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
 			return err
 		}
-		hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
 	}
 
-	check := func() error {
-		if err := s.getPostCheck(ctx, req.PostID)(); err != nil {
-			return err
+	var finalRootID uint64
+	var finalParentID uint64
+
+	if req.ParentID > 0 {
+		parent, err := s.actionRepo.GetCommentByID(ctx, req.ParentID)
+		if err != nil || parent == nil || parent.Status != CommentStatusApproved {
+			return ErrPostCommentNotFound
+		}
+		if parent.PostID != req.PostID {
+			return ErrPostCommentNotFound
 		}
 
-		if req.RootID > 0 {
-			root, err := s.actionRepo.GetCommentByID(ctx, req.RootID)
-			if err != nil || root == nil || root.Status != CommentStatusApproved {
-				return ErrPostCommentNotFound
-			}
-			if root.PostID != req.PostID {
-				return ErrPostCommentNotFound
-			}
+		finalParentID = parent.ID
 
-			if req.ParentID == req.RootID {
-				return nil
-			}
+		if parent.RootID == 0 {
+			finalRootID = parent.ID
+		} else {
+			finalRootID = parent.RootID
 		}
-
-		if req.ParentID > 0 {
-			parent, err := s.actionRepo.GetCommentByID(ctx, req.ParentID)
-			if err != nil || parent == nil || parent.Status != CommentStatusApproved {
-				return ErrPostCommentNotFound
-			}
-			if parent.PostID != req.PostID {
-				return ErrPostCommentNotFound
-			}
-			if req.RootID > 0 && parent.RootID != req.RootID && parent.ID != req.RootID {
-				return ErrPostCommentNotFound
-			}
-		}
-		return nil
+	} else {
+		finalRootID = 0
+		finalParentID = 0
 	}
 
-	if err := check(); err != nil {
+	comment := &model.PostComment{
+		PostID:    req.PostID,
+		Content:   req.Content,
+		MediaInfo: make(model.MediaList, len(req.MediaInfo)),
+		UserID:    userID,
+		RootID:    finalRootID,
+		ParentID:  finalParentID,
+		Status:    CommentStatusPending,
+		CreatedAt: time.Now(),
+		UpdatedAt: time.Now(),
+	}
+
+	if err := copier.Copy(&comment.MediaInfo, req.MediaInfo); err != nil {
 		return err
 	}
-
-	comment := &model.PostComment{}
-	_ = copier.Copy(comment, req)
-	comment.UserID = userID
-	comment.Status = CommentStatusPending
-	comment.CreatedAt = time.Now()
-	comment.UpdatedAt = time.Now()
 
 	if err := s.actionRepo.CreateComment(ctx, comment); err != nil {
 		return err
@@ -263,7 +262,7 @@ func (s *postActionServiceImpl) GetCommentsByPostID(ctx context.Context, postID 
 		return nil, err
 	}
 
-	var res []*dto.CommentDTO
+	res := make([]*dto.CommentDTO, 0, len(rootComments))
 	for _, rc := range rootComments {
 		rootDTO := s.convertToCommentDTO(ctx, rc)
 		subCount, _ := s.actionRepo.GetSubCommentCountByRootID(ctx, rc.ID)
@@ -284,7 +283,7 @@ func (s *postActionServiceImpl) GetSubComments(ctx context.Context, rootID uint6
 	if err != nil {
 		return nil, err
 	}
-	var res []*dto.CommentDTO
+	res := make([]*dto.CommentDTO, 0, len(subs))
 	for _, sc := range subs {
 		res = append(res, s.convertToCommentDTO(ctx, sc))
 	}
@@ -369,10 +368,15 @@ func (s *postActionServiceImpl) GetPostViewCount(ctx context.Context, postID uin
 }
 
 func (s *postActionServiceImpl) ReportPost(ctx context.Context, userID, postID uint64) error {
+	post, err := s.postRepo.GetPost(ctx, postID)
+	if err != nil || post == nil {
+		return ErrPostNotFound
+	}
+
 	reportLockKey := consts.ReportLock + strconv.FormatUint(userID, 10) + ":" + strconv.FormatUint(postID, 10)
 	set, err := redis.TryLock(ctx, reportLockKey, "1", 24*time.Hour, 0)
 	if err != nil || !set {
-		return errors.New("you have already reported this post today")
+		return ErrActionDuplicate
 	}
 
 	countKey := consts.PostReportKey + strconv.FormatUint(postID, 10)
@@ -393,7 +397,7 @@ func (s *postActionServiceImpl) expandPostList(ctx context.Context, ids []uint64
 	if err != nil {
 		return nil, err
 	}
-	var list []*dto.PostDTO
+	list := make([]*dto.PostDTO, 0, len(posts))
 	for _, post := range posts {
 		item := &dto.PostDTO{}
 		_ = copier.Copy(item, post)

@@ -11,11 +11,13 @@ import (
 )
 
 type PostActionHandler struct {
+	postSvc   service.PostService
 	actionSvc service.PostActionService
 }
 
-func NewPostActionHandler(actionSvc service.PostActionService) *PostActionHandler {
+func NewPostActionHandler(postSvc service.PostService, actionSvc service.PostActionService) *PostActionHandler {
 	return &PostActionHandler{
+		postSvc:   postSvc,
 		actionSvc: actionSvc,
 	}
 }
@@ -80,6 +82,12 @@ func (s *PostActionHandler) GetPostActionState(c *gin.Context) {
 	postID, err := strconv.ParseUint(c.Param("post_id"), 10, 64)
 	if err != nil || postID == 0 {
 		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+
+	_, err = s.postSvc.GetPostById(c.Request.Context(), postID)
+	if err != nil {
+		response.Error(c, err)
 		return
 	}
 
@@ -311,6 +319,7 @@ func (s *PostActionHandler) ReportPost(c *gin.Context) {
 		return
 	}
 	if err := s.actionSvc.ReportPost(c.Request.Context(), c.GetUint64("user_id"), postID); err != nil {
+		response.Error(c, err)
 		return
 	}
 	response.Success(c, nil)
