@@ -6,7 +6,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	log "log/slog"
 	"strconv"
 
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/search"
@@ -82,7 +81,6 @@ func (s *PostRepoImpl) GetPostById(ctx context.Context, id uint64) (*PostES, err
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == NotFoundCode {
-				log.Warn("Post not found in ES", "id", id)
 				return nil, nil
 			}
 		}
@@ -169,8 +167,6 @@ func (s *PostRepoImpl) GetLatestPosts(ctx context.Context, from, size int) ([]*P
 func (s *PostRepoImpl) IndexPost(ctx context.Context, post *PostES, version int64) error {
 	docID := strconv.FormatUint(post.ID, 10)
 
-	log.Info("Post Index: Indexing Post", "post", post, "version", version)
-
 	_, err := Client.Index(PostIndex).
 		Id(docID).
 		Document(post).
@@ -182,7 +178,6 @@ func (s *PostRepoImpl) IndexPost(ctx context.Context, post *PostES, version int6
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == ConflictCode {
-				log.Warn("Post Index: Post Version Conflict", "id", post.ID, "version", version)
 				return nil
 			}
 		}
@@ -201,14 +196,12 @@ func (s *PostRepoImpl) DeletePost(ctx context.Context, id uint64) error {
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == NotFoundCode {
-				log.Warn("Post Index: Post already deleted or not found in ES", "id", id)
 				return nil
 			}
 		}
 		return err
 	}
 
-	log.Info("Post Index: Delete success", "id", id)
 	return nil
 }
 
@@ -238,16 +231,13 @@ func (s *PostRepoImpl) UpdatePostUserDetail(ctx context.Context, userID uint64, 
 
 	resp, err := req.Do(ctx)
 	if err != nil {
-		log.Error("Post Index: Update User Detail Failed", "err", err)
 		return errors.New(fmt.Sprintf("Post Index: Update User Detail Failed: %s", err.Error()))
 	}
 
 	if len(resp.Failures) != 0 {
-		log.Error("Post Index: Update User Detail Has Failures", "failures", resp.Failures)
 		return errors.New(fmt.Sprintf("Post Index: Update User Detail Has Failures, count: %d", len(resp.Failures)))
 	}
 
-	log.Info("Post Index: Update User Detail Success", "count", resp.Total)
 	return nil
 }
 

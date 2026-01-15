@@ -2,6 +2,7 @@ package mongo
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/logger"
 	"context"
 	log "log/slog"
 	"time"
@@ -16,7 +17,10 @@ func InitMongo(cfg config.MongoConfig) (*mongo.Database, error) {
 	defer cancel()
 
 	// 建立连接
-	client, err := mongo.Connect(ctx, options.Client().ApplyURI(cfg.URL))
+	client, err := mongo.Connect(ctx, options.Client().
+		ApplyURI(cfg.URL).
+		SetMonitor(logger.NewMongoMonitor()),
+	)
 	if err != nil {
 		return nil, err
 	}

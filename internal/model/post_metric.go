@@ -16,5 +16,5 @@ type PostMetric struct {
 }
 
 func (PostMetric) TableName() string {
-	return "post_daily_metrics"
+	return "post_metrics"
 }

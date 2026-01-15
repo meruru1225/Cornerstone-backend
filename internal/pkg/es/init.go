@@ -2,8 +2,10 @@ package es
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/logger"
 	"context"
 	log "log/slog"
+	"net/http"
 
 	"github.com/elastic/go-elasticsearch/v8"
 )
@@ -31,6 +33,9 @@ func InitClient() error {
 		Addresses: []string{elasticCfg.Address},
 		Username:  elasticCfg.Username,
 		Password:  elasticCfg.Password,
+		Transport: &logger.ESTransport{
+			Transport: http.DefaultTransport,
+		},
 	}
 
 	var err error

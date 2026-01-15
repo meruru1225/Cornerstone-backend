@@ -3,7 +3,6 @@ package es
 import (
 	"context"
 	"errors"
-	log "log/slog"
 	"strconv"
 
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
@@ -42,7 +41,6 @@ func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, siz
 		Do(ctx)
 
 	if err != nil {
-		log.ErrorContext(ctx, "ES search user error", "err", err, "keyword", keyword)
 		return nil, 0, err
 	}
 
@@ -52,7 +50,6 @@ func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, siz
 	for _, hit := range res.Hits.Hits {
 		var user UserES
 		if err := json.Unmarshal(hit.Source_, &user); err != nil {
-			log.ErrorContext(ctx, "unmarshal ES user error", "err", err)
 			continue
 		}
 		users = append(users, &user)
@@ -84,9 +81,6 @@ func (s *UserRepoImpl) IndexUser(ctx context.Context, user *UserES, version int6
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == ConflictCode {
-				log.Warn("Version conflict detected, skipping old data",
-					"user_id", user.ID,
-					"version", version)
 				return nil
 			}
 		}
@@ -103,7 +97,6 @@ func (s *UserRepoImpl) DeleteUser(ctx context.Context, id uint64) error {
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {
 			if e.Status == NotFoundCode {
-				log.Warn("User already deleted or not found in ES", "id", id)
 				return nil
 			}
 		}
