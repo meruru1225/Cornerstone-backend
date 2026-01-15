@@ -5,3 +5,7 @@ const (
 	MimePrefixAudio = "audio"
 	MimePrefixVideo = "video"
 )
+
+const (
+	PostStatusNormal = 1
+)

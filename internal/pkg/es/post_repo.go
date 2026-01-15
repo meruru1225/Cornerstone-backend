@@ -1,6 +1,7 @@
 package es
 
 import (
+	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/util"
 	"context"
 	"errors"
@@ -34,6 +35,12 @@ func NewPostRepo() PostRepo {
 }
 
 func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, queryVector []float32, from, size int) ([]*PostES, error) {
+	statusFilter := types.Query{
+		Term: map[string]types.TermQuery{
+			"status": {Value: consts.PostStatusNormal},
+		},
+	}
+
 	searchReq := Client.Search().
 		Index(PostIndex).
 		// 配置 k-NN 搜索
@@ -43,12 +50,20 @@ func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, query
 			K:             util.PtrInt(10),
 			NumCandidates: util.PtrInt(100),
 			Similarity:    util.PtrFloat32(0.6),
+			Filter:        []types.Query{statusFilter},
 		}).
 		// 配置传统文本搜索（增强精准度）
 		Query(&types.Query{
-			MultiMatch: &types.MultiMatchQuery{
-				Query:  queryText,
-				Fields: []string{"title^2", "content"},
+			Bool: &types.BoolQuery{
+				Must: []types.Query{
+					{
+						MultiMatch: &types.MultiMatchQuery{
+							Query:  queryText,
+							Fields: []string{"title^2", "content"},
+						},
+					},
+				},
+				Filter: []types.Query{statusFilter},
 			},
 		}).
 		Source_(&types.SourceFilter{
@@ -101,8 +116,21 @@ func (s *PostRepoImpl) GetPostByMainTag(ctx context.Context, tag string, isMain 
 	searchReq := Client.Search().
 		Index(PostIndex).
 		Query(&types.Query{
-			Term: map[string]types.TermQuery{
-				searchField: {Value: tag},
+			Bool: &types.BoolQuery{
+				Must: []types.Query{
+					{
+						Term: map[string]types.TermQuery{
+							searchField: {Value: tag},
+						},
+					},
+				},
+				Filter: []types.Query{
+					{
+						Term: map[string]types.TermQuery{
+							"status": {Value: consts.PostStatusNormal},
+						},
+					},
+				},
 			},
 		}).
 		Source_(&types.SourceFilter{
@@ -123,7 +151,11 @@ func (s *PostRepoImpl) GetPostByMainTag(ctx context.Context, tag string, isMain 
 func (s *PostRepoImpl) GetLatestPosts(ctx context.Context, from, size int) ([]*PostES, error) {
 	searchReq := Client.Search().
 		Index(PostIndex).
-		Query(&types.Query{MatchAll: &types.MatchAllQuery{}}).
+		Query(&types.Query{
+			Term: map[string]types.TermQuery{
+				"status": {Value: consts.PostStatusNormal},
+			},
+		}).
 		Sort(types.SortOptions{SortOptions: map[string]types.FieldSort{
 			"created_at": {Order: &sortorder.Desc},
 		}}).

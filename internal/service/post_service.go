@@ -61,7 +61,6 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page
 	if len(tags) == 0 && userID > 0 {
 		userIDStr := strconv.FormatUint(userID, 10)
 		lockKey := consts.UserInterestInitLock + userIDStr
-
 		lockUUID := uuid.NewString()
 
 		ok, err := redis.TryLock(ctx, lockKey, lockUUID, 5, 0)
@@ -102,28 +101,60 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page
 		}
 	}
 
+	var finalPosts []*es.PostES
+	var err error
+
+	// 尝试推荐搜索
 	if len(tags) > 0 {
 		interestText := strings.Join(tags, " ")
-
-		vector, err := llm.GetVectorByString(ctx, interestText)
-		if err != nil {
-			log.ErrorContext(ctx, "llm get vector error, fallback to latest", "err", err)
+		vector, vErr := llm.GetVectorByString(ctx, interestText)
+		if vErr != nil {
+			log.ErrorContext(ctx, "llm get vector error", "err", vErr)
 		} else {
-			return getWaterfallPosts(pageSize,
-				func() ([]*es.PostES, error) {
-					return s.postESRepo.HybridSearch(ctx, interestText, vector, from, pageSize+1)
-				},
-				s.batchToPostDTOByES,
-			)
+			finalPosts, err = s.postESRepo.HybridSearch(ctx, interestText, vector, from, pageSize+1)
+			if err != nil {
+				log.ErrorContext(ctx, "hybrid search error", "err", err)
+			}
 		}
 	}
 
-	return getWaterfallPosts(pageSize,
-		func() ([]*es.PostES, error) {
-			return s.postESRepo.GetLatestPosts(ctx, from, pageSize+1)
-		},
-		s.batchToPostDTOByES,
-	)
+	// 如果推荐结果不足，获取最新帖子填充
+	if len(finalPosts) < pageSize+1 {
+		needed := (pageSize + 1) - len(finalPosts)
+		// 降级逻辑：获取最新的帖子列表
+		latestPosts, lErr := s.postESRepo.GetLatestPosts(ctx, from, needed)
+		if lErr == nil {
+			// 简单去重
+			existMap := make(map[uint64]struct{})
+			for _, p := range finalPosts {
+				existMap[p.ID] = struct{}{}
+			}
+			for _, p := range latestPosts {
+				if _, ok := existMap[p.ID]; !ok {
+					finalPosts = append(finalPosts, p)
+					if len(finalPosts) >= pageSize+1 {
+						break
+					}
+				}
+			}
+		}
+	}
+
+	hasMore := false
+	if len(finalPosts) > pageSize {
+		hasMore = true
+		finalPosts = finalPosts[:pageSize]
+	}
+
+	dtoItems, err := s.batchToPostDTOByES(finalPosts)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.PostWaterfallDTO{
+		List:    dtoItems,
+		HasMore: hasMore,
+	}, nil
 }
 
 // SearchPost 搜索帖子
@@ -148,15 +179,8 @@ func (s *postServiceImpl) CreatePost(ctx context.Context, userID uint64, postDTO
 	var hdelKeys []string
 
 	for _, mediaDTO := range postDTO.Medias {
-		if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+		if err := s.processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
 			return err
-		}
-		if err := getCover(ctx, mediaDTO); err != nil {
-			return err
-		}
-		hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
-		if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
-			hdelKeys = append(hdelKeys, *mediaDTO.CoverURL)
 		}
 	}
 
@@ -197,7 +221,8 @@ func (s *postServiceImpl) GetPost(ctx context.Context, userID uint64, PostID uin
 	if err != nil {
 		return nil, err
 	}
-	if post == nil {
+	if post == nil ||
+		(post.UserID != userID && post.Status != consts.PostStatusNormal) {
 		return nil, ErrPostNotFound
 	}
 
@@ -322,15 +347,8 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		}
 
 		if !isAlreadyInOld {
-			if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+			if err = s.processMedia(ctx, mediaDTO, &hdelKeys); err != nil {
 				return err
-			}
-			if err := getCover(ctx, mediaDTO); err != nil {
-				return err
-			}
-			hdelKeys = append(hdelKeys, mediaDTO.MediaURL)
-			if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
-				hdelKeys = append(hdelKeys, *mediaDTO.CoverURL)
 			}
 		}
 	}
@@ -529,6 +547,63 @@ func (s *postServiceImpl) batchToPostDTOByES(posts []*es.PostES) ([]*dto.PostDTO
 	return out, nil
 }
 
+func (s *postServiceImpl) getCover(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
+	if strings.HasPrefix(mediaDTO.MimeType, "video") &&
+		mediaDTO.CoverURL == nil {
+		stream, err := util.GetCover(ctx, minio.GetPublicURL(mediaDTO.MediaURL))
+		if err != nil {
+			return err
+		}
+		coverName := time.Now().Format("2006/01/02/") + uuid.NewString() + ".jpg"
+		var fileKey string
+		if seeker, ok := stream.(interface{ Size() int64 }); ok {
+			fileKey, err = minio.UploadFile(ctx, coverName, stream, seeker.Size(), "image/jpeg")
+		} else {
+			fileKey, err = minio.UploadFile(ctx, coverName, stream, -1, "image/jpeg")
+		}
+		if err != nil {
+			return err
+		}
+		mediaDTO.CoverURL = &fileKey
+	}
+	return nil
+}
+
+func (s *postServiceImpl) processMedia(ctx context.Context, mediaDTO *dto.MediasBaseDTO, hdelKeys *[]string) error {
+	if err := verifyAndFillMediaMeta(ctx, mediaDTO); err != nil {
+		return err
+	}
+	if err := s.getCover(ctx, mediaDTO); err != nil {
+		return err
+	}
+	*hdelKeys = append(*hdelKeys, mediaDTO.MediaURL)
+	if mediaDTO.CoverURL != nil && *mediaDTO.CoverURL != "" {
+		*hdelKeys = append(*hdelKeys, *mediaDTO.CoverURL)
+	}
+	return nil
+}
+
+func verifyAndFillMediaMeta(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
+	val, err := redis.HGet(ctx, consts.MediaTempKey, mediaDTO.MediaURL)
+	if err != nil || val == "" {
+		log.WarnContext(ctx, "media resource not found in temp cache", "url", mediaDTO.MediaURL)
+		return ErrFileNotExist
+	}
+
+	var meta dto.MediaTempMetadata
+	if err = json.Unmarshal([]byte(val), &meta); err != nil {
+		log.ErrorContext(ctx, "unmarshal media meta failed", "url", mediaDTO.MediaURL, "err", err)
+		return UnExpectedError
+	}
+
+	mediaDTO.Width = meta.Width
+	mediaDTO.Height = meta.Height
+	mediaDTO.Duration = meta.Duration
+	mediaDTO.MimeType = meta.MimeType
+
+	return nil
+}
+
 func getWaterfallPosts[T any](
 	pageSize int,
 	fetchFunc func() ([]T, error),
@@ -554,47 +629,4 @@ func getWaterfallPosts[T any](
 		List:    dtoItems,
 		HasMore: hasMore,
 	}, nil
-}
-
-func verifyAndFillMediaMeta(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
-	val, err := redis.HGet(ctx, consts.MediaTempKey, mediaDTO.MediaURL)
-	if err != nil || val == "" {
-		log.WarnContext(ctx, "media resource not found in temp cache", "url", mediaDTO.MediaURL)
-		return ErrFileNotExist
-	}
-
-	var meta dto.MediaTempMetadata
-	if err = json.Unmarshal([]byte(val), &meta); err != nil {
-		log.ErrorContext(ctx, "unmarshal media meta failed", "url", mediaDTO.MediaURL, "err", err)
-		return UnExpectedError
-	}
-
-	mediaDTO.Width = meta.Width
-	mediaDTO.Height = meta.Height
-	mediaDTO.Duration = meta.Duration
-	mediaDTO.MimeType = meta.MimeType
-
-	return nil
-}
-
-func getCover(ctx context.Context, mediaDTO *dto.MediasBaseDTO) error {
-	if strings.HasPrefix(mediaDTO.MimeType, "video") &&
-		mediaDTO.CoverURL == nil {
-		stream, err := util.GetCover(ctx, minio.GetPublicURL(mediaDTO.MediaURL))
-		if err != nil {
-			return err
-		}
-		coverName := time.Now().Format("2006/01/02/") + uuid.NewString() + ".jpg"
-		var fileKey string
-		if seeker, ok := stream.(interface{ Size() int64 }); ok {
-			fileKey, err = minio.UploadFile(ctx, coverName, stream, seeker.Size(), "image/jpeg")
-		} else {
-			fileKey, err = minio.UploadFile(ctx, coverName, stream, -1, "image/jpeg")
-		}
-		if err != nil {
-			return err
-		}
-		mediaDTO.CoverURL = &fileKey
-	}
-	return nil
 }
