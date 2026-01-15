@@ -7,9 +7,11 @@ import (
 	"Cornerstone/internal/pkg/security"
 	"Cornerstone/internal/service"
 	"context"
+	"encoding/base64"
 	log "log/slog"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/gin-gonic/gin"
@@ -29,7 +31,6 @@ func NewWsHandler(im service.IMService) *WsHandler {
 }
 
 func (s *WsHandler) Connect(c *gin.Context) {
-	// 鉴权
 	token := c.Query("token")
 	if token == "" {
 		response.Error(c, service.UnauthorizedError)
@@ -43,7 +44,6 @@ func (s *WsHandler) Connect(c *gin.Context) {
 	}
 	userID := claims.UserID
 
-	// 升级 Websocket
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {
 		log.Error("WS 协议升级失败", "err", err)
@@ -53,29 +53,19 @@ func (s *WsHandler) Connect(c *gin.Context) {
 		_ = conn.Close()
 	}()
 
-	// 获取用户参与的所有会话，订阅 Redis 频道
-	list, err := s.imService.GetConversationList(context.Background(), userID)
-	if err != nil {
-		log.Error("获取会话列表失败", "userID", userID, "err", err)
-		return
-	}
+	userChannel := consts.IMUserKey + strconv.FormatUint(userID, 10)
 
-	var channels []string
-	for _, conv := range list {
-		channels = append(channels, consts.IMConversationKey+strconv.FormatUint(conv.ConversationID, 10))
-	}
-
-	// 订阅 Redis 总线
-	pubsub := redis.Subscribe(context.Background(), channels...)
+	// 订阅 Redis 个人总线
+	pubsub := redis.Subscribe(context.Background(), userChannel)
 	defer func() {
-		_ = pubsub.Close()
+		_ = pubsub.Close() //
 	}()
 
-	log.Info("用户 WS 连接已建立", "userID", userID, "channels", len(channels))
+	log.Info("用户 WS 连接已建立并订阅个人频道", "userID", userID, "channel", userChannel)
 
 	stopChan := make(chan struct{})
 
-	// 读循环：监听客户端主动断开
+	// 读循环：监听客户端主动断开或网络异常
 	go func() {
 		for {
 			_, _, err := conn.ReadMessage()
@@ -86,17 +76,23 @@ func (s *WsHandler) Connect(c *gin.Context) {
 		}
 	}()
 
-	// 写循环：监听 Redis 并推送至客户端
+	// 写循环：从 Redis 接收消息并推送到客户端
 	redisCh := pubsub.Channel()
-	if err != nil {
-		log.Error("WS 设置写超时失败", "userID", userID, "err", err)
-		return
-	}
 	for {
 		select {
 		case msg := <-redisCh:
 			_ = conn.SetWriteDeadline(time.Now().Add(10 * time.Second))
-			err := conn.WriteMessage(websocket.TextMessage, []byte(msg.Payload))
+
+			payloadStr := strings.Trim(msg.Payload, "\"")
+			var rawData []byte
+			var err error
+
+			rawData, err = base64.StdEncoding.DecodeString(payloadStr)
+			if err != nil {
+				rawData = []byte(payloadStr)
+			}
+
+			err = conn.WriteMessage(websocket.TextMessage, rawData)
 			if err != nil {
 				log.Error("WS 推送失败", "userID", userID, "err", err)
 				return

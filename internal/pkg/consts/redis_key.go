@@ -27,7 +27,7 @@ const (
 	PostMetrics30DaysKey        = "post:metrics:30days:"
 	UserContentMetrics7DaysKey  = "user_content:metrics:7days:"
 	UserContentMetrics30DaysKey = "user_content:metrics:30days:"
-	IMConversationKey           = "im:conversation:"
+	IMUserKey                   = "im:user:"
 	MediaTempKey                = "media:temp"
 )
 

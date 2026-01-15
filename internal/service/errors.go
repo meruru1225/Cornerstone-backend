@@ -35,6 +35,8 @@ var (
 	ErrPostCommentNotFound     = errors.New("评论不存在")
 	ErrActionDuplicate         = errors.New("重复操作")
 	ErrSysBoxNotFound          = errors.New("系统通知不存在")
+	ErrTargetUserInvalid       = errors.New("目标用户无效")
+	ErrConversation            = errors.New("会话异常")
 	UnauthorizedError          = errors.New("权限不足")
 	UnExpectedError            = errors.New("系统异常，请稍后重试")
 )
@@ -63,6 +65,8 @@ var ErrorMap = map[error]int{
 	ErrPostCommentNotFound:     NotFound,
 	ErrActionDuplicate:         BadRequest,
 	ErrSysBoxNotFound:          NotFound,
+	ErrTargetUserInvalid:       BadRequest,
+	ErrConversation:            BadRequest,
 	UnauthorizedError:          Unauthorized,
 	UnExpectedError:            InternalServerError,
 }

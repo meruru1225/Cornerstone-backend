@@ -2,6 +2,7 @@ package service
 
 import (
 	"Cornerstone/internal/api/dto"
+	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/redis"
@@ -16,10 +17,12 @@ import (
 	"github.com/goccy/go-json"
 )
 
-// IMService 即时通讯服务
+// IMService 即时通讯服务接口定义
 type IMService interface {
 	SendMessage(ctx context.Context, senderID uint64, req *dto.SendMessageReq) (*dto.MessageDTO, error)
+	GetOrCreateConversation(ctx context.Context, userID, targetUserID uint64, convType int8) (uint64, error)
 	GetChatHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error)
+	SyncMessages(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error)
 	GetConversationList(ctx context.Context, userID uint64) ([]*dto.ConversationDTO, error)
 	MarkAsRead(ctx context.Context, userID uint64, convID uint64, seq uint64) error
 	Close()
@@ -38,7 +41,7 @@ func NewIMService(convRepo repository.ConversationRepo, messageRepo mongo.Messag
 	s := &imServiceImpl{
 		convRepo:    convRepo,
 		messageRepo: messageRepo,
-		retryChan:   make(chan *mongo.Message, 2048), // 充足的缓冲区
+		retryChan:   make(chan *mongo.Message, 2048),
 		stopChan:    make(chan struct{}),
 	}
 
@@ -53,13 +56,41 @@ func NewIMService(convRepo repository.ConversationRepo, messageRepo mongo.Messag
 
 // SendMessage 发送消息
 func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *dto.SendMessageReq) (*dto.MessageDTO, error) {
-	newSeq, err := s.convRepo.IncrMaxSeq(ctx, req.ConversationID, req.Content, int8(req.MsgType), senderID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to increment sequence: %w", err)
+	var convID = req.ConversationID
+	var targetID = req.TargetUserID
+
+	// 1确定会话 ID 与 目标用户 ID
+	if convID == 0 {
+		if targetID == 0 {
+			return nil, fmt.Errorf("target_user_id is required for new conversation")
+		}
+		id, err := s.GetOrCreateConversation(ctx, senderID, targetID, 1)
+		if err != nil {
+			return nil, err
+		}
+		convID = id
+	} else {
+		// 校验成员权限并解析 targetID
+		conv, err := s.convRepo.GetConversation(ctx, convID)
+		if err != nil {
+			return nil, err
+		}
+		isMember, _ := s.convRepo.IsMember(ctx, convID, senderID)
+		if !isMember {
+			return nil, fmt.Errorf("not a member of this conversation")
+		}
+		targetID, _ = s.parsePeerID(conv.PeerKey, senderID)
 	}
 
+	// MySQL 原子定序
+	newSeq, err := s.convRepo.IncrMaxSeq(ctx, convID, req.Content, int8(req.MsgType), senderID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 构造并存入 MongoDB
 	msgModel := &mongo.Message{
-		ConversationID: req.ConversationID,
+		ConversationID: convID,
 		SenderID:       senderID,
 		MsgType:        req.MsgType,
 		Content:        req.Content,
@@ -72,31 +103,59 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 	defer cancel()
 
 	if err := s.messageRepo.SaveMessage(writeCtx, msgModel); err != nil {
-		log.Warn("MongoDB save failed, message sent to retry channel", "seq", newSeq, "err", err)
 		select {
 		case s.retryChan <- msgModel:
 		default:
-			log.Error("Retry channel overflow, message persistence risk", "seq", newSeq)
 		}
 	}
 
-	go s.publishMessageToRedis(context.Background(), msgModel)
+	// 推送到接收者的【用户个人频道】
+	_ = s.publishMessageToRedis(context.Background(), msgModel, targetID)
 
 	return s.toMessageDTO(msgModel), nil
 }
 
-// GetChatHistory 拉取历史
+// GetOrCreateConversation 针对单聊：获取或创建会话
+func (s *imServiceImpl) GetOrCreateConversation(ctx context.Context, userID, targetUserID uint64, convType int8) (uint64, error) {
+	// 生成单聊唯一的 PeerKey
+	var peerKey string
+	if userID < targetUserID {
+		peerKey = fmt.Sprintf("%d_%d", userID, targetUserID)
+	} else {
+		peerKey = fmt.Sprintf("%d_%d", targetUserID, userID)
+	}
+
+	conv, err := s.convRepo.GetConversationByPeerKey(ctx, peerKey)
+	if err == nil {
+		return conv.ID, nil
+	}
+
+	newConv := &model.Conversation{
+		Type:          convType,
+		PeerKey:       peerKey,
+		LastMessageAt: time.Now(),
+	}
+	members := []*model.ConversationMember{
+		{UserID: userID, IsVisible: 1, JoinedAt: time.Now()},
+		{UserID: targetUserID, IsVisible: 1, JoinedAt: time.Now()},
+	}
+
+	if err := s.convRepo.CreateConversation(ctx, newConv, members); err != nil {
+		return 0, err
+	}
+	return newConv.ID, nil
+}
+
+// GetChatHistory 拉取历史，包含空洞自愈
 func (s *imServiceImpl) GetChatHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error) {
 	models, err := s.messageRepo.GetHistory(ctx, convID, lastSeq, pageSize)
 	if err != nil {
 		return nil, err
 	}
 
-	// 空洞自愈：若第一页数据发现 Mongo 落后于 MySQL 存根，则动态补足
 	if lastSeq == 0 {
 		conv, err := s.convRepo.GetConversation(ctx, convID)
 		if err == nil {
-			// 检测是否存在未同步到 Mongo 的最新消息
 			hasGap := (len(models) == 0 && conv.MaxMsgSeq > 0) || (len(models) > 0 && models[0].Seq < conv.MaxMsgSeq)
 			if hasGap {
 				stub := &dto.MessageDTO{
@@ -107,7 +166,6 @@ func (s *imServiceImpl) GetChatHistory(ctx context.Context, convID uint64, lastS
 					Seq:            conv.MaxMsgSeq,
 					CreatedAt:      conv.LastMessageAt,
 				}
-				// 将补救的存根消息置于结果集首位
 				res := []*dto.MessageDTO{stub}
 				for _, m := range models {
 					res = append(res, s.toMessageDTO(m))
@@ -124,9 +182,21 @@ func (s *imServiceImpl) GetChatHistory(ctx context.Context, convID uint64, lastS
 	return res, nil
 }
 
-// GetConversationList 获取会话
+func (s *imServiceImpl) SyncMessages(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error) {
+	models, err := s.messageRepo.SyncMessages(ctx, convID, lastSeq, pageSize)
+	if err != nil {
+		return nil, err
+	}
+	res := make([]*dto.MessageDTO, 0, len(models))
+	for _, m := range models {
+		res = append(res, s.toMessageDTO(m))
+	}
+	return res, nil
+}
+
+// GetConversationList 获取会话列表
 func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) ([]*dto.ConversationDTO, error) {
-	members, err := s.convRepo.GetUserConversationList(ctx, userID)
+	members, err := s.convRepo.GetUserConversationMemList(ctx, userID)
 	if err != nil {
 		return nil, err
 	}
@@ -145,18 +215,16 @@ func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) 
 			IsPinned:       m.IsPinned == 1,
 		}
 
-		// 单聊场景：解析 PeerID (对方ID)
 		if m.Conversation.Type == 1 {
-			peerID, err := s.parsePeerID(m.Conversation.PeerKey, userID)
-			if err == nil {
-				d.PeerID = peerID
-			}
+			peerID, _ := s.parsePeerID(m.Conversation.PeerKey, userID)
+			d.PeerID = peerID
 		}
 		res = append(res, d)
 	}
 	return res, nil
 }
 
+// MarkAsRead 标记已读
 func (s *imServiceImpl) MarkAsRead(ctx context.Context, userID uint64, convID uint64, seq uint64) error {
 	conv, err := s.convRepo.GetConversation(ctx, convID)
 	if err != nil {
@@ -168,24 +236,59 @@ func (s *imServiceImpl) MarkAsRead(ctx context.Context, userID uint64, convID ui
 		targetSeq = conv.MaxMsgSeq
 	}
 
-	err = s.convRepo.UpdateReadSeq(ctx, convID, userID, targetSeq)
-	if err != nil {
+	if err = s.convRepo.UpdateReadSeq(ctx, convID, userID, targetSeq); err != nil {
 		return err
 	}
 
-	go s.publishReadReceipt(convID, userID, targetSeq)
+	peerID, err := s.parsePeerID(conv.PeerKey, userID)
+	if err != nil {
+		return err
+	}
+	go func() {
+		err = s.publishReadReceipt(convID, userID, peerID, targetSeq)
+		if err != nil {
+			log.Error("Failed to publish read receipt", "err", err)
+		}
+	}()
 
 	return nil
 }
 
-// Close 优雅关闭服务
+// publishMessageToRedis 发布消息到接收者的用户频道
+func (s *imServiceImpl) publishMessageToRedis(ctx context.Context, msg *mongo.Message, targetUserID uint64) error {
+	data, err := json.Marshal(s.toMessageDTO(msg))
+	if err != nil {
+		return err
+	}
+	channel := consts.IMUserKey + strconv.FormatUint(targetUserID, 10)
+	return redis.Publish(ctx, channel, data)
+}
+
+// publishReadReceipt 发布已读回执到对方频道
+func (s *imServiceImpl) publishReadReceipt(convID, fromUID, toPeerID, seq uint64) error {
+	receipt := &dto.ReadReceiptDTO{
+		ConversationID: convID,
+		UserID:         fromUID,
+		ReadSeq:        seq,
+		Type:           "READ_RECEIPT",
+	}
+	data, err := json.Marshal(receipt)
+	if err != nil {
+		return err
+	}
+	channel := consts.IMUserKey + strconv.FormatUint(toPeerID, 10)
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	defer cancel()
+	return redis.Publish(ctx, channel, data)
+}
+
 func (s *imServiceImpl) Close() {
 	close(s.stopChan)
-	s.wg.Wait() // 等待所有 Worker 协程安全退出
+	s.wg.Wait()
 	log.Info("IMService shut down gracefully")
 }
 
-// calibrationWorker 后台异步校准协程
 func (s *imServiceImpl) calibrationWorker() {
 	defer s.wg.Done()
 	for {
@@ -193,18 +296,14 @@ func (s *imServiceImpl) calibrationWorker() {
 		case msg := <-s.retryChan:
 			backoff := time.Second
 			for i := 0; i < 3; i++ {
-				// 为重试请求设置独立的上下文超时
 				ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 				err := s.messageRepo.SaveMessage(ctx, msg)
 				cancel()
-
 				if err == nil {
-					log.Debug("Calibration success", "seq", msg.Seq)
 					break
 				}
-				log.Warn("Calibration attempt failed", "seq", msg.Seq, "attempt", i+1)
 				time.Sleep(backoff)
-				backoff *= 2 // 指数退避
+				backoff *= 2
 			}
 		case <-s.stopChan:
 			return
@@ -212,7 +311,6 @@ func (s *imServiceImpl) calibrationWorker() {
 	}
 }
 
-// parsePeerID 解析 PeerID
 func (s *imServiceImpl) parsePeerID(peerKey string, currentUserID uint64) (uint64, error) {
 	var u1, u2 uint64
 	_, err := fmt.Sscanf(peerKey, "%d_%d", &u1, &u2)
@@ -225,47 +323,10 @@ func (s *imServiceImpl) parsePeerID(peerKey string, currentUserID uint64) (uint6
 	return u1, nil
 }
 
-// publishMessageToRedis 将消息推送到 Redis 消息总线
-func (s *imServiceImpl) publishMessageToRedis(ctx context.Context, msg *mongo.Message) {
-	channel := consts.IMConversationKey + strconv.FormatUint(msg.ConversationID, 10)
-	data, _ := json.Marshal(s.toMessageDTO(msg))
-
-	// 使用 Redis Publish
-	if err := redis.Publish(ctx, channel, data); err != nil {
-		log.Error("Redis Publish failed", "channel", channel, "err", err)
-	}
-}
-
-// publishReadReceipt 发布已读信号到 Redis
-func (s *imServiceImpl) publishReadReceipt(convID uint64, userID uint64, readSeq uint64) {
-	receipt := &dto.ReadReceiptDTO{
-		ConversationID: convID,
-		UserID:         userID,
-		ReadSeq:        readSeq,
-		Type:           "READ_RECEIPT",
-	}
-
-	channel := consts.IMConversationKey + strconv.FormatUint(convID, 10)
-
-	// 序列化并发布
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	defer cancel()
-
-	if err := redis.Publish(ctx, channel, receipt); err != nil {
-		log.Error("发布已读回执失败", "convID", convID, "err", err)
-	}
-}
-
-// toMessageDTO 转换为 DTO
 func (s *imServiceImpl) toMessageDTO(m *mongo.Message) *dto.MessageDTO {
 	return &dto.MessageDTO{
-		ID:             m.ID,
-		ConversationID: m.ConversationID,
-		SenderID:       m.SenderID,
-		MsgType:        m.MsgType,
-		Content:        m.Content,
-		Payload:        m.Payload,
-		Seq:            m.Seq,
-		CreatedAt:      m.CreatedAt,
+		ID: m.ID, ConversationID: m.ConversationID, SenderID: m.SenderID,
+		MsgType: m.MsgType, Content: m.Content, Payload: m.Payload,
+		Seq: m.Seq, CreatedAt: m.CreatedAt,
 	}
 }

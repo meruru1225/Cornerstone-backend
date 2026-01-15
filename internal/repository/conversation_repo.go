@@ -12,11 +12,12 @@ type ConversationRepo interface {
 	CreateConversation(ctx context.Context, conv *model.Conversation, members []*model.ConversationMember) error
 	GetConversation(ctx context.Context, convID uint64) (*model.Conversation, error)
 	GetConversationByPeerKey(ctx context.Context, peerKey string) (*model.Conversation, error)
+	IsMember(ctx context.Context, convID uint64, userID uint64) (bool, error)
 
 	UpdateReadSeq(ctx context.Context, convID, userID, seq uint64) error
 	IncrMaxSeq(ctx context.Context, convID uint64, lastMsg string, msgType int8, senderID uint64) (uint64, error)
 
-	GetUserConversationList(ctx context.Context, userID uint64) ([]*model.ConversationMember, error)
+	GetUserConversationMemList(ctx context.Context, userID uint64) ([]*model.ConversationMember, error)
 	GetTotalUnreadCount(ctx context.Context, userID uint64) (int64, error)
 }
 
@@ -36,12 +37,43 @@ func (s *conversationRepoImpl) CreateConversation(ctx context.Context, conv *mod
 		}
 		for _, m := range members {
 			m.ConversationID = conv.ID
+			m.JoinedAt = time.Now()
 			if err := tx.Create(m).Error; err != nil {
 				return err
 			}
 		}
 		return nil
 	})
+}
+
+// GetConversation 根据会话 ID 获取会话
+func (s *conversationRepoImpl) GetConversation(ctx context.Context, convID uint64) (*model.Conversation, error) {
+	var conv model.Conversation
+	err := s.db.WithContext(ctx).First(&conv, convID).Error
+	return &conv, err
+}
+
+// GetConversationByPeerKey 根据会话标识获取会话
+func (s *conversationRepoImpl) GetConversationByPeerKey(ctx context.Context, peerKey string) (*model.Conversation, error) {
+	var conv model.Conversation
+	err := s.db.WithContext(ctx).Where("peer_key = ?", peerKey).First(&conv).Error
+	return &conv, err
+}
+
+// IsMember 检查用户是否是会话成员
+func (s *conversationRepoImpl) IsMember(ctx context.Context, convID uint64, userID uint64) (bool, error) {
+	var count int64
+	err := s.db.WithContext(ctx).Model(&model.ConversationMember{}).
+		Where("conversation_id = ? AND user_id = ?", convID, userID).
+		Count(&count).Error
+	return count > 0, err
+}
+
+// UpdateReadSeq 更新用户已读进度 (已读回执)
+func (s *conversationRepoImpl) UpdateReadSeq(ctx context.Context, convID, userID, seq uint64) error {
+	return s.db.WithContext(ctx).Model(&model.ConversationMember{}).
+		Where("conversation_id = ? AND user_id = ?", convID, userID).
+		Update("read_msg_seq", seq).Error
 }
 
 // IncrMaxSeq 核心定序逻辑：利用 MySQL 行锁确保 Seq 绝对递增
@@ -69,8 +101,8 @@ func (s *conversationRepoImpl) IncrMaxSeq(ctx context.Context, convID uint64, la
 	return maxSeq, err
 }
 
-// GetUserConversationList 联表查询，利用嵌套 Model 自动装配
-func (s *conversationRepoImpl) GetUserConversationList(ctx context.Context, userID uint64) ([]*model.ConversationMember, error) {
+// GetUserConversationMemList 联表查询，利用嵌套 Model 自动装配
+func (s *conversationRepoImpl) GetUserConversationMemList(ctx context.Context, userID uint64) ([]*model.ConversationMember, error) {
 	var members []*model.ConversationMember
 	// 使用 Conversation__ 别名配合 GORM 的嵌套填充特性
 	err := s.db.WithContext(ctx).Table("conversation_members m").
@@ -98,23 +130,4 @@ func (s *conversationRepoImpl) GetTotalUnreadCount(ctx context.Context, userID u
 		Select("SUM(CASE WHEN c.max_msg_seq > m.read_msg_seq THEN c.max_msg_seq - m.read_msg_seq ELSE 0 END)").
 		Scan(&total).Error
 	return total, err
-}
-
-// UpdateReadSeq 更新用户已读进度 (已读回执)
-func (s *conversationRepoImpl) UpdateReadSeq(ctx context.Context, convID, userID, seq uint64) error {
-	return s.db.WithContext(ctx).Model(&model.ConversationMember{}).
-		Where("conversation_id = ? AND user_id = ?", convID, userID).
-		Update("read_msg_seq", seq).Error
-}
-
-func (s *conversationRepoImpl) GetConversation(ctx context.Context, convID uint64) (*model.Conversation, error) {
-	var conv model.Conversation
-	err := s.db.WithContext(ctx).First(&conv, convID).Error
-	return &conv, err
-}
-
-func (s *conversationRepoImpl) GetConversationByPeerKey(ctx context.Context, peerKey string) (*model.Conversation, error) {
-	var conv model.Conversation
-	err := s.db.WithContext(ctx).Where("peer_key = ?", peerKey).First(&conv).Error
-	return &conv, err
 }

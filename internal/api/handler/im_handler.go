@@ -26,7 +26,7 @@ func (s *IMHandler) SendMessage(c *gin.Context) {
 	}
 
 	// 从 Context 中获取中间件解析出的当前用户 ID
-	senderID := c.GetUint64("userID")
+	senderID := c.GetUint64("user_id")
 
 	res, err := s.imService.SendMessage(c, senderID, &req)
 	if err != nil {
@@ -44,7 +44,7 @@ func (s *IMHandler) MarkAsRead(c *gin.Context) {
 		return
 	}
 
-	userID := c.GetUint64("userID")
+	userID := c.GetUint64("user_id")
 
 	err := s.imService.MarkAsRead(c, userID, req.ConversationID, req.Sequence)
 	if err != nil {
@@ -57,9 +57,9 @@ func (s *IMHandler) MarkAsRead(c *gin.Context) {
 
 // GetChatHistory 获取历史消息
 func (s *IMHandler) GetChatHistory(c *gin.Context) {
-	convID, _ := strconv.ParseUint(c.Query("conversationId"), 10, 64)
-	lastSeq, _ := strconv.ParseUint(c.Query("lastSeq"), 10, 64)
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("pageSize", "20"))
+	convID, _ := strconv.ParseUint(c.Query("conv_id"), 10, 64)
+	lastSeq, _ := strconv.ParseUint(c.Query("last_seq"), 10, 64)
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
 
 	res, err := s.imService.GetChatHistory(c, convID, lastSeq, pageSize)
 	if err != nil {
@@ -69,9 +69,23 @@ func (s *IMHandler) GetChatHistory(c *gin.Context) {
 	response.Success(c, res)
 }
 
+// GetNewMessages 获取新消息接口
+func (s *IMHandler) GetNewMessages(c *gin.Context) {
+	convID, _ := strconv.ParseUint(c.Query("conv_id"), 10, 64)
+	lastSeq, _ := strconv.ParseUint(c.Query("last_seq"), 10, 64)
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+
+	res, err := s.imService.SyncMessages(c, convID, lastSeq, pageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, res)
+}
+
 // GetConversationList 获取会话列表
 func (s *IMHandler) GetConversationList(c *gin.Context) {
-	userID := c.GetUint64("userID")
+	userID := c.GetUint64("user_id")
 	res, err := s.imService.GetConversationList(c, userID)
 	if err != nil {
 		response.Error(c, err)

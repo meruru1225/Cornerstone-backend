@@ -165,6 +165,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			{
 				authGroup.POST("/send", group.IMHandler.SendMessage)
 				authGroup.GET("/history", group.IMHandler.GetChatHistory)
+				authGroup.GET("/sync", group.IMHandler.GetNewMessages)
 				authGroup.GET("/list", group.IMHandler.GetConversationList)
 				authGroup.POST("/read", group.IMHandler.MarkAsRead)
 			}

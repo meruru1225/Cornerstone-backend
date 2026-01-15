@@ -11,6 +11,7 @@ import (
 type MessageRepo interface {
 	SaveMessage(ctx context.Context, msg *Message) error
 	GetHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*Message, error)
+	SyncMessages(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*Message, error)
 	GetMessageBySeq(ctx context.Context, convID uint64, seq uint64) (*Message, error)
 }
 
@@ -20,7 +21,7 @@ type messageRepoImpl struct {
 
 func NewMessageRepo(db *mongo.Database) MessageRepo {
 	return &messageRepoImpl{
-		col: db.Collection("message"),
+		col: db.Collection("messages"),
 	}
 }
 
@@ -60,6 +61,31 @@ func (s *messageRepoImpl) GetHistory(ctx context.Context, convID uint64, lastSeq
 		return nil, err
 	}
 
+	return messages, nil
+}
+
+// SyncMessages 同步消息
+func (s *messageRepoImpl) SyncMessages(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*Message, error) {
+	filter := bson.M{"conversation_id": convID}
+
+	filter["seq"] = bson.M{"$gt": lastSeq}
+
+	findOptions := options.Find().
+		SetSort(bson.D{{Key: "seq", Value: 1}}).
+		SetLimit(int64(pageSize))
+
+	cursor, err := s.col.Find(ctx, filter, findOptions)
+	if err != nil {
+		return nil, err
+	}
+	defer func() {
+		_ = cursor.Close(ctx)
+	}()
+
+	var messages []*Message
+	if err := cursor.All(ctx, &messages); err != nil {
+		return nil, err
+	}
 	return messages, nil
 }
 
