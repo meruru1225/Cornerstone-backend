@@ -436,16 +436,17 @@ func (s *postServiceImpl) RecordInterest(ctx context.Context, userID uint64, aiT
 		}
 		lockKey := consts.UserInterestInitLock + userIDStr
 		ok, err := redis.TryLock(ctx, lockKey, newUUID.String(), 5, 0)
+		if err != nil || !ok {
+			return
+		}
 		defer redis.UnLock(ctx, lockKey, newUUID.String())
-		if err == nil && ok {
-			if ex, _ := redis.Exists(ctx, key); !ex {
-				snapshot, err := s.userInterestRepo.GetUserInterests(ctx, userID)
-				if err == nil && snapshot != nil && len(snapshot.Interests) > 0 {
-					for tag, score := range snapshot.Interests {
-						_ = redis.ZAdd(ctx, key, float64(score), tag)
-					}
-					_ = redis.Expire(ctx, key, 24*time.Hour)
+		if ex, _ := redis.Exists(ctx, key); !ex {
+			snapshot, err := s.userInterestRepo.GetUserInterests(ctx, userID)
+			if err == nil && snapshot != nil && len(snapshot.Interests) > 0 {
+				for tag, score := range snapshot.Interests {
+					_ = redis.ZAdd(ctx, key, float64(score), tag)
 				}
+				_ = redis.Expire(ctx, key, 24*time.Hour)
 			}
 		}
 	}
