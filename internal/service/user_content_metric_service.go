@@ -134,6 +134,7 @@ func (s *userContentServiceImpl) getUserContentMetrics(
 		UserID:   userID,
 		Days:     days,
 		Likes:    make([]*dto.PostMetricDTO, 0, days),
+		Collects: make([]*dto.PostMetricDTO, 0, days),
 		Comments: make([]*dto.PostMetricDTO, 0, days),
 		Views:    make([]*dto.PostMetricDTO, 0, days),
 	}
@@ -145,17 +146,18 @@ func (s *userContentServiceImpl) getUserContentMetrics(
 		currentDate := util.GetMidnight(now.AddDate(0, 0, -i))
 		dateStr := currentDate.Format(time.DateOnly)
 
-		l, c, v := 0, 0, 0
+		l, c, v, cl := 0, 0, 0, 0
 		if val, ok := dataMap[dateStr]; ok {
-			l, c, v = val.TotalLikes, val.TotalComments, val.TotalViews
+			l, c, v, cl = val.TotalLikes, val.TotalComments, val.TotalViews, val.TotalCollects
 			lastValid = val
 		} else if lastValid != nil {
-			// 如果当天没有生成快照记录，则继承最近一次有效的累计值
-			l, c, v = lastValid.TotalLikes, lastValid.TotalComments, lastValid.TotalViews
+			// 继承最近一次有效的累计值（包含收藏）
+			l, c, v, cl = lastValid.TotalLikes, lastValid.TotalComments, lastValid.TotalViews, lastValid.TotalCollects
 		}
 
 		res.Likes = append(res.Likes, &dto.PostMetricDTO{Date: dateStr, Value: l})
-		res.Comments = append(res.Comments, &dto.PostMetricDTO{Date: dateStr, Value: c})
+		res.Collects = append(res.Collects, &dto.PostMetricDTO{Date: dateStr, Value: c})
+		res.Comments = append(res.Comments, &dto.PostMetricDTO{Date: dateStr, Value: cl})
 		res.Views = append(res.Views, &dto.PostMetricDTO{Date: dateStr, Value: v})
 	}
 
