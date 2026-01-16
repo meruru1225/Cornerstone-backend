@@ -505,3 +505,13 @@ func (s *UserHandler) SearchUser(c *gin.Context) {
 	}
 	response.Success(c, users)
 }
+
+func (s *UserHandler) GetUserRole(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	roles, err := s.userSvc.GetUserRoleNames(c.Request.Context(), userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, roles)
+}

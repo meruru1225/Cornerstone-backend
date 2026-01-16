@@ -63,6 +63,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.PUT("/phone", group.UserHandler.ChangePhone)
 				authGroup.POST("/avatar", group.UserHandler.UploadAvatar)
 				authGroup.POST("/cancel", group.UserHandler.CancelUser)
+				authGroup.GET("/roles", group.UserHandler.GetUserRole)
 			}
 
 			// 需要登录 & 拥有 admin 角色
@@ -72,7 +73,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				adminGroup.POST("/ban", group.UserHandler.BanUser)
 				adminGroup.POST("/unban", group.UserHandler.UnbanUser)
 				adminGroup.GET("/condition", group.UserHandler.GetUserByCondition)
-				adminGroup.GET("/roles", group.UserHandler.GetAllRoles)
+				adminGroup.GET("/roles/all", group.UserHandler.GetAllRoles)
 				adminGroup.POST("/role", group.UserHandler.AddUserRole)
 				adminGroup.DELETE("/role", group.UserHandler.DeleteUserRole)
 			}

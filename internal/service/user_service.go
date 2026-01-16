@@ -24,6 +24,7 @@ type UserService interface {
 	Register(ctx context.Context, dto *dto.RegisterDTO) error
 	Login(ctx context.Context, dto *dto.CredentialDTO, isPhoneCode bool) (string, error)
 	Logout(ctx context.Context, token string) error
+	GetUserRoleNames(ctx context.Context, userID uint64) ([]string, error)
 	GetUserInfo(ctx context.Context, id uint64) (*dto.UserDTO, error)
 	GetUserHomeInfoById(ctx context.Context, id uint64) (*dto.UserDTO, error)
 	GetUserSimpleInfoByIds(ctx context.Context, ids []uint64) ([]*dto.UserDTO, error)
@@ -157,6 +158,17 @@ func (s *UserServiceImpl) Logout(ctx context.Context, token string) error {
 		return err
 	}
 	return nil
+}
+
+func (s *UserServiceImpl) GetUserRoleNames(ctx context.Context, userID uint64) ([]string, error) {
+	user, err := s.userRepo.GetUserById(ctx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if user == nil {
+		return nil, ErrUserNotFound
+	}
+	return s.getRoleNamesForUser(ctx, user)
 }
 
 func (s *UserServiceImpl) GetUserInfo(ctx context.Context, id uint64) (*dto.UserDTO, error) {
