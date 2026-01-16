@@ -1,6 +1,7 @@
 package handler
 
 import (
+	"Cornerstone/internal/api/config"
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
@@ -10,6 +11,7 @@ import (
 	"Cornerstone/internal/service"
 	"errors"
 	log "log/slog"
+	"net/http"
 	"path"
 	"strconv"
 	"strings"
@@ -82,11 +84,29 @@ func (s *UserHandler) Login(c *gin.Context) {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
+
 	token, err := s.userSvc.Login(c.Request.Context(), &loginDTO, true)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+
+	domain := config.Cfg.Server.Domain
+	if strings.Contains(c.Request.Host, "localhost") {
+		domain = ""
+	}
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"auth_token",
+		token,
+		3600*24*7,
+		"/",
+		domain,
+		isSecure,
+		true,
+	)
+
 	response.Success(c, map[string]string{
 		"token": token,
 	})

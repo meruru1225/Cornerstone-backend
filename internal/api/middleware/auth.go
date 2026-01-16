@@ -15,17 +15,28 @@ import (
 // AuthMiddleware 负责验证 JWT 并将用户身份信息注入 Context
 func AuthMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var token string
+
 		authHeader := c.GetHeader("Authorization")
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+
+		if token == "" {
+			cookieToken, err := c.Cookie("auth_token")
+			if err == nil {
+				token = cookieToken
+			}
+		}
+
+		if token == "" {
 			response.Fail(c, response.Unauthorized, "Token 缺失或格式错误")
 			c.Abort()
 			return
 		}
 
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-
 		// 验证 Token
-		claims, err := security.ValidateToken(tokenString)
+		claims, err := security.ValidateToken(token)
 		if err != nil {
 			response.Fail(c, response.Unauthorized, "Token 无效或已过期")
 			c.Abort()
@@ -33,7 +44,7 @@ func AuthMiddleware() gin.HandlerFunc {
 		}
 
 		// 检查 Token 是否已注销
-		signature, err := security.ExtractSignature(tokenString)
+		signature, err := security.ExtractSignature(token)
 		if err == nil {
 			value, _ := redis.GetValue(c.Request.Context(), signature)
 			if value != "" {

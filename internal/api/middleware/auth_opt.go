@@ -11,17 +11,26 @@ import (
 // AuthOptionalMiddleware 可选鉴权：解析成功注入 UID，失败或缺失则 UID 为 0
 func AuthOptionalMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		authHeader := c.GetHeader("Authorization")
+		var token string
 
-		if authHeader == "" || !strings.HasPrefix(authHeader, "Bearer ") {
+		authHeader := c.GetHeader("Authorization")
+		if authHeader != "" && strings.HasPrefix(authHeader, "Bearer ") {
+			token = strings.TrimPrefix(authHeader, "Bearer ")
+		}
+
+		if token == "" {
+			if cookieToken, err := c.Cookie("auth_token"); err == nil {
+				token = cookieToken
+			}
+		}
+
+		if token == "" {
 			c.Set("user_id", uint64(0))
 			c.Next()
 			return
 		}
 
-		token := strings.TrimPrefix(authHeader, "Bearer ")
 		claims, err := security.ValidateToken(token)
-
 		if err != nil {
 			c.Set("user_id", uint64(0))
 		} else {

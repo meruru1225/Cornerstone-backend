@@ -1,5 +1,6 @@
 server:
   port: 8080
+  domain: "{{COOKIE_DOMAIN}}"
 
 database:
   dsn: "{{DB_DSN}}"
