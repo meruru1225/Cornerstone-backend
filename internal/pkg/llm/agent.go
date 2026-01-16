@@ -82,7 +82,7 @@ func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string
 		var messages []llms.MessageContent
 		messages = append(messages, llms.MessageContent{
 			Role:  llms.ChatMessageTypeSystem,
-			Parts: []llms.ContentPart{llms.TextPart(searchPrompt)},
+			Parts: []llms.ContentPart{llms.TextPart(chatPrompt)},
 		})
 
 		// 转换历史记录
