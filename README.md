@@ -223,6 +223,29 @@ go run main.go
 
 服务将启动在 `http://localhost:8080`
 
+## 构建与部署脚本
+
+项目提供了便捷的构建和部署脚本，位于 `script/` 目录下：
+
+- `build.sh`: 用于构建不同平台的二进制文件
+- `deploy.sh`: 用于本地环境检查和运行准备
+
+### 构建脚本
+
+```bash
+# 执行构建脚本，生成多平台二进制文件
+chmod +x script/build.sh
+./script/build.sh
+```
+
+### 本地运行脚本
+
+```bash
+# 检查运行环境并准备配置
+chmod +x script/deploy.sh
+./script/deploy.sh
+```
+
 ## 项目特点
 
 - **高可用性**: 使用多种数据库和缓存系统保证数据可靠性
