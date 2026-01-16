@@ -21,8 +21,8 @@ import (
 type IMService interface {
 	SendMessage(ctx context.Context, senderID uint64, req *dto.SendMessageReq) (*dto.MessageDTO, error)
 	GetOrCreateConversation(ctx context.Context, userID, targetUserID uint64, convType int8) (uint64, error)
-	GetChatHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error)
-	SyncMessages(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error)
+	GetChatHistory(ctx context.Context, userID uint64, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error)
+	SyncMessages(ctx context.Context, userID uint64, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error)
 	GetConversationList(ctx context.Context, userID uint64) ([]*dto.ConversationDTO, error)
 	MarkAsRead(ctx context.Context, userID uint64, convID uint64, seq uint64) error
 	Close()
@@ -147,7 +147,12 @@ func (s *imServiceImpl) GetOrCreateConversation(ctx context.Context, userID, tar
 }
 
 // GetChatHistory 拉取历史，包含空洞自愈
-func (s *imServiceImpl) GetChatHistory(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error) {
+func (s *imServiceImpl) GetChatHistory(ctx context.Context, userID uint64, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error) {
+	isMember, err := s.convRepo.IsMember(ctx, convID, userID)
+	if err != nil || !isMember {
+		return nil, UnauthorizedError
+	}
+
 	models, err := s.messageRepo.GetHistory(ctx, convID, lastSeq, pageSize)
 	if err != nil {
 		return nil, err
@@ -182,7 +187,12 @@ func (s *imServiceImpl) GetChatHistory(ctx context.Context, convID uint64, lastS
 	return res, nil
 }
 
-func (s *imServiceImpl) SyncMessages(ctx context.Context, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error) {
+func (s *imServiceImpl) SyncMessages(ctx context.Context, userID uint64, convID uint64, lastSeq uint64, pageSize int) ([]*dto.MessageDTO, error) {
+	isMember, err := s.convRepo.IsMember(ctx, convID, userID)
+	if err != nil || !isMember {
+		return nil, UnauthorizedError
+	}
+
 	models, err := s.messageRepo.SyncMessages(ctx, convID, lastSeq, pageSize)
 	if err != nil {
 		return nil, err
@@ -226,6 +236,11 @@ func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) 
 
 // MarkAsRead 标记已读
 func (s *imServiceImpl) MarkAsRead(ctx context.Context, userID uint64, convID uint64, seq uint64) error {
+	isMember, err := s.convRepo.IsMember(ctx, convID, userID)
+	if err != nil || !isMember {
+		return UnauthorizedError
+	}
+
 	conv, err := s.convRepo.GetConversation(ctx, convID)
 	if err != nil {
 		return err

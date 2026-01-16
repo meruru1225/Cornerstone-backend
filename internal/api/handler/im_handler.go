@@ -57,11 +57,18 @@ func (s *IMHandler) MarkAsRead(c *gin.Context) {
 
 // GetChatHistory 获取历史消息
 func (s *IMHandler) GetChatHistory(c *gin.Context) {
-	convID, _ := strconv.ParseUint(c.Query("conv_id"), 10, 64)
-	lastSeq, _ := strconv.ParseUint(c.Query("last_seq"), 10, 64)
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	var err error
+	convID, err := strconv.ParseUint(c.Query("conv_id"), 10, 64)
+	lastSeq, err := strconv.ParseUint(c.Query("last_seq"), 10, 64)
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
 
-	res, err := s.imService.GetChatHistory(c, convID, lastSeq, pageSize)
+	userID := c.GetUint64("user_id")
+
+	res, err := s.imService.GetChatHistory(c, userID, convID, lastSeq, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -71,11 +78,18 @@ func (s *IMHandler) GetChatHistory(c *gin.Context) {
 
 // GetNewMessages 获取新消息接口
 func (s *IMHandler) GetNewMessages(c *gin.Context) {
-	convID, _ := strconv.ParseUint(c.Query("conv_id"), 10, 64)
-	lastSeq, _ := strconv.ParseUint(c.Query("last_seq"), 10, 64)
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	var err error
+	convID, err := strconv.ParseUint(c.Query("conv_id"), 10, 64)
+	lastSeq, err := strconv.ParseUint(c.Query("last_seq"), 10, 64)
+	pageSize, err := strconv.Atoi(c.DefaultQuery("page_size", "50"))
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
 
-	res, err := s.imService.SyncMessages(c, convID, lastSeq, pageSize)
+	userID := c.GetUint64("user_id")
+
+	res, err := s.imService.SyncMessages(c, userID, convID, lastSeq, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
