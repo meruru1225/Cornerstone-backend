@@ -2,6 +2,7 @@ package redis
 
 import (
 	"Cornerstone/internal/api/config"
+	"Cornerstone/internal/pkg/logger"
 	"context"
 
 	"github.com/redis/go-redis/v9"
@@ -13,15 +14,18 @@ var Rdb *redis.Client
 // InitRedis 初始化 Redis 客户端连接
 func InitRedis(cfg config.RedisConfig) error {
 	rdb := redis.NewClient(&redis.Options{
-		Addr:     cfg.Addr,
-		Password: cfg.Password,
-		DB:       cfg.DB,
-		PoolSize: cfg.PoolSize,
+		Addr:            cfg.Addr,
+		Password:        cfg.Password,
+		DB:              cfg.DB,
+		PoolSize:        cfg.PoolSize,
+		DisableIdentity: true,
 
 		MaintNotificationsConfig: &maintnotifications.Config{
 			Mode: maintnotifications.ModeDisabled,
 		},
 	})
+
+	rdb.AddHook(logger.NewRedisLogger())
 
 	ctx := context.Background()
 
