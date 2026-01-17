@@ -31,6 +31,7 @@ type PostService interface {
 	GetPostByIds(ctx context.Context, ids []uint64) ([]*dto.PostDTO, error)
 	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	GetPostByTag(ctx context.Context, tag string, isMain bool, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	GetWarningPosts(ctx context.Context, lastID uint64, pageSize int) (*dto.PostWaterfallDTO, error)
 	UpdatePostStatus(ctx context.Context, postID uint64, status int) error
 	UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
@@ -272,6 +273,16 @@ func (s *postServiceImpl) GetPostSelf(ctx context.Context, userId uint64, page, 
 			}
 			return out, nil
 		},
+	)
+}
+
+// GetPostByTag 根据标签获取帖子
+func (s *postServiceImpl) GetPostByTag(ctx context.Context, tag string, isMain bool, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	return getWaterfallPosts(pageSize,
+		func() ([]*es.PostES, error) {
+			return s.postESRepo.GetPostByTag(ctx, tag, isMain, page-1, pageSize)
+		},
+		s.batchToPostDTOByES,
 	)
 }
 

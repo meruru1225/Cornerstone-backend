@@ -19,7 +19,7 @@ import (
 type PostRepo interface {
 	HybridSearch(ctx context.Context, queryText string, queryVector []float32, from, size int) ([]*PostES, error)
 	GetPostById(ctx context.Context, id uint64) (*PostES, error)
-	GetPostByMainTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error)
+	GetPostByTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error)
 	GetLatestPosts(ctx context.Context, from, size int) ([]*PostES, error)
 	IndexPost(ctx context.Context, post *PostES, version int64) error
 	DeletePost(ctx context.Context, id uint64) error
@@ -105,7 +105,7 @@ func (s *PostRepoImpl) GetPostById(ctx context.Context, id uint64) (*PostES, err
 	return &post, nil
 }
 
-func (s *PostRepoImpl) GetPostByMainTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error) {
+func (s *PostRepoImpl) GetPostByTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error) {
 	searchField := "user_tags"
 	if isMain {
 		searchField = "main_tag"

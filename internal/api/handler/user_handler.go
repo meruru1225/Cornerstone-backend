@@ -87,21 +87,7 @@ func (s *UserHandler) Login(c *gin.Context) {
 		return
 	}
 
-	domain := config.Cfg.Server.Domain
-	if strings.Contains(c.Request.Host, "localhost") {
-		domain = ""
-	}
-	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
-	c.SetSameSite(http.SameSiteLaxMode)
-	c.SetCookie(
-		"auth_token",
-		token,
-		3600*24*7,
-		"/",
-		domain,
-		isSecure,
-		true,
-	)
+	s.setCookie(c, token, loginDTO.Remember)
 
 	response.Success(c, map[string]string{
 		"token": token,
@@ -136,6 +122,11 @@ func (s *UserHandler) LoginByPhone(c *gin.Context) {
 		token = loginToken
 		isReg = true
 	}
+
+	if isReg {
+		s.setCookie(c, token, req.Remember)
+	}
+
 	response.Success(c, map[string]any{
 		"token":  token,
 		"is_reg": isReg,
@@ -510,4 +501,26 @@ func (s *UserHandler) GetUserRole(c *gin.Context) {
 		return
 	}
 	response.Success(c, roles)
+}
+
+func (s *UserHandler) setCookie(c *gin.Context, token string, remember bool) {
+	domain := config.Cfg.Server.Domain
+	if strings.Contains(c.Request.Host, "localhost") {
+		domain = ""
+	}
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	maxAge := 0
+	if remember {
+		maxAge = 3600 * 24 * 7
+	}
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"auth_token",
+		token,
+		maxAge,
+		"/",
+		domain,
+		isSecure,
+		true,
+	)
 }

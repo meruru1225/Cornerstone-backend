@@ -115,6 +115,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authOptGroup.GET("/search", group.PostHandler.SearchPost)
 				authOptGroup.GET("/detail/:post_id", group.PostHandler.GetPost)
 				authOptGroup.GET("/list/:user_id", group.PostHandler.GetPostByUserId)
+				authOptGroup.GET("/tags", group.PostHandler.GetPostByTag)
 			}
 
 			authGroup := postGroup.Group("")

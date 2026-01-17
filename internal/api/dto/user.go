@@ -53,6 +53,7 @@ type ForgetPasswordDTO struct {
 type CredentialDTO struct {
 	Account  string `json:"account" binding:"required"`
 	Password string `json:"password" binding:"required"`
+	Remember bool   `json:"remember"` // 浏览器 HttpOnly Cookie使用
 }
 
 // ChangeUsernameDTO 修改用户名
@@ -79,8 +80,9 @@ type PhoneDTO struct {
 
 // PhoneLoginDTO 手机号登录
 type PhoneLoginDTO struct {
-	Phone string `json:"phone"`
-	Code  string `json:"code"`
+	Phone    string `json:"phone"`
+	Code     string `json:"code"`
+	Remember bool   `json:"remember"` // 浏览器 HttpOnly Cookie使用
 }
 
 type BanUserDTO struct {

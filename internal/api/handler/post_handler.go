@@ -188,6 +188,33 @@ func (s *PostHandler) GetPostByUserId(c *gin.Context) {
 	response.Success(c, posts)
 }
 
+// GetPostByTag 根据标签获取帖子
+func (s *PostHandler) GetPostByTag(c *gin.Context) {
+	var query struct {
+		Tag      string `form:"tag" binding:"required"`
+		IsMain   bool   `form:"is_main"`
+		Page     int    `form:"page"`
+		PageSize int    `form:"page_size"`
+	}
+	err := c.ShouldBindQuery(&query)
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+	if query.Page == 0 {
+		query.Page = 1
+	}
+	if query.PageSize == 0 {
+		query.PageSize = 20
+	}
+	posts, err := s.postSvc.GetPostByTag(c.Request.Context(), query.Tag, query.IsMain, query.Page, query.PageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, posts)
+}
+
 // GetWarningPosts 审核员：获取待审核列表
 func (s *PostHandler) GetWarningPosts(c *gin.Context) {
 	lastID, err := strconv.ParseUint(c.DefaultQuery("last_id", "0"), 10, 64)
