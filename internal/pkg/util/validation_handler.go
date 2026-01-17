@@ -64,13 +64,3 @@ func ValidateRegDTO(dto *dto.RegisterDTO) error {
 	}
 	return ValidateDTO(dto)
 }
-
-func ValidateLoginDTO(dto *dto.CredentialDTO) bool {
-	if dto.Username != nil && dto.Password != nil {
-		return true
-	}
-	if dto.Phone != nil {
-		return true
-	}
-	return false
-}

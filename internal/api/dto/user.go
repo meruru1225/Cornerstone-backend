@@ -51,9 +51,8 @@ type ForgetPasswordDTO struct {
 
 // CredentialDTO 登录凭证
 type CredentialDTO struct {
-	Username *string `json:"username,omitempty"`
-	Password *string `json:"password,omitempty"`
-	Phone    *string `json:"phone,omitempty"`
+	Account  string `json:"account" binding:"required"`
+	Password string `json:"password" binding:"required"`
 }
 
 // ChangeUsernameDTO 修改用户名

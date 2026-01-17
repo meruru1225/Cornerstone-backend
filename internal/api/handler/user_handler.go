@@ -77,10 +77,6 @@ func (s *UserHandler) Login(c *gin.Context) {
 	var loginDTO dto.CredentialDTO
 	err := c.ShouldBind(&loginDTO)
 	if err != nil {
-		response.Error(c, err)
-		return
-	}
-	if !util.ValidateLoginDTO(&loginDTO) {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
@@ -127,7 +123,7 @@ func (s *UserHandler) LoginByPhone(c *gin.Context) {
 		return
 	}
 	loginDTO := dto.CredentialDTO{
-		Phone: &phone,
+		Account: phone,
 	}
 	loginToken, err := s.userSvc.Login(c.Request.Context(), &loginDTO, false)
 	isReg := false

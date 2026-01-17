@@ -60,9 +60,11 @@ func NewUserService(userRepo repository.UserRepo, roleRepo repository.RoleRepo, 
 }
 
 func (s *UserServiceImpl) Register(ctx context.Context, regDTO *dto.RegisterDTO) error {
-	credentialDTO := &dto.CredentialDTO{
-		Username: regDTO.Username,
-		Phone:    regDTO.Phone,
+	credentialDTO := &dto.CredentialDTO{}
+	if regDTO.Phone != nil {
+		credentialDTO.Account = *regDTO.Phone
+	} else {
+		credentialDTO.Account = *regDTO.Username
 	}
 	findUser, err := s.findUserByLoginCredentials(ctx, credentialDTO)
 	if err != nil {
@@ -129,10 +131,10 @@ func (s *UserServiceImpl) Login(ctx context.Context, dto *dto.CredentialDTO, isB
 		return "", ErrUserNotFound
 	}
 	if isByPassword {
-		if dto.Password == nil || user.Password == nil {
+		if dto.Password == "" || user.Password == nil {
 			return "", ErrPasswordIncorrect
 		}
-		err = security.CheckPasswordHash(*dto.Password, *user.Password)
+		err = security.CheckPasswordHash(dto.Password, *user.Password)
 		if err != nil {
 			return "", ErrPasswordIncorrect
 		}
@@ -549,13 +551,20 @@ func (s *UserServiceImpl) InvalidateUser(ctx context.Context, userID uint64) err
 }
 
 func (s *UserServiceImpl) findUserByLoginCredentials(ctx context.Context, dto *dto.CredentialDTO) (*model.User, error) {
-	if dto.Username != nil && *dto.Username != "" {
-		return s.userRepo.GetUserByUsername(ctx, *dto.Username)
+	if dto.Account == "" {
+		return nil, ErrMissingLoginCredentials
 	}
-	if dto.Phone != nil && *dto.Phone != "" {
-		return s.userRepo.GetUserByPhone(ctx, *dto.Phone)
+	user, err := s.userRepo.GetUserByUsername(ctx, dto.Account)
+	if err != nil {
+		return nil, err
 	}
-	return nil, ErrMissingLoginCredentials
+	if user == nil {
+		user, err = s.userRepo.GetUserByPhone(ctx, dto.Account)
+		if err != nil {
+			return nil, err
+		}
+	}
+	return user, nil
 }
 
 func (s *UserServiceImpl) getRoleNamesForUser(ctx context.Context, user *model.User) ([]string, error) {
