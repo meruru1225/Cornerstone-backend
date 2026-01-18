@@ -276,7 +276,7 @@ func (s *postActionServiceImpl) GetCommentsByPostID(ctx context.Context, postID 
 		}
 	}
 
-	currentUserID, _ := ctx.Value("userID").(uint64)
+	currentUserID, _ := ctx.Value("user_id").(uint64)
 
 	likesMap := s.batchGetLikes(ctx, allIDs, rootComments)
 	countMap, _ := s.actionRepo.GetSubCommentCounts(ctx, rootIDs)
@@ -309,7 +309,7 @@ func (s *postActionServiceImpl) GetSubComments(ctx context.Context, rootID uint6
 		subIDs = append(subIDs, sc.ID)
 	}
 
-	currentUserID, _ := ctx.Value("userID").(uint64)
+	currentUserID, _ := ctx.Value("user_id").(uint64)
 
 	likesMap := s.batchGetLikes(ctx, subIDs, subs)
 	isLikedMap := s.batchGetIsLiked(ctx, currentUserID, subIDs)

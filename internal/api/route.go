@@ -139,9 +139,13 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 
 		postActionGroup := apiGroup.Group("/post/action")
 		{
-			postActionGroup.GET("/comments/:post_id", group.PostActionHandler.GetComments)
-			postActionGroup.GET("/sub-comments/:root_id", group.PostActionHandler.GetSubComments)
-			postActionGroup.POST("/batch/likes", group.PostActionHandler.GetBatchLikes)
+			authOptActionGroup := postActionGroup.Group("")
+			authOptActionGroup.Use(middleware.AuthOptionalMiddleware())
+			{
+				authOptActionGroup.GET("/comments/:post_id", group.PostActionHandler.GetComments)
+				authOptActionGroup.GET("/sub-comments/:root_id", group.PostActionHandler.GetSubComments)
+				authOptActionGroup.POST("/batch/likes", group.PostActionHandler.GetBatchLikes)
+			}
 
 			authActionGroup := postActionGroup.Group("")
 			authActionGroup.Use(middleware.AuthMiddleware())

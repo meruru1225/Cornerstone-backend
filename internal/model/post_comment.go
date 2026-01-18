@@ -23,7 +23,7 @@ type PostComment struct {
 	User            UserDetail     `gorm:"foreignKey:UserID;references:UserID" json:"user"`
 	ReplyUser       UserDetail     `gorm:"foreignKey:ReplyToUserID;references:UserID" json:"replyUser"`
 	SubComments     []*PostComment `gorm:"foreignKey:RootID;references:ID" json:"subComments"`
-	SubCommentCount int64          `gorm:"not null;default:0" json:"subCommentCount"`
+	SubCommentCount int64          `gorm:"-" json:"subCommentCount"`
 }
 
 func (PostComment) TableName() string {

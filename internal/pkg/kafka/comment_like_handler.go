@@ -78,10 +78,10 @@ func (s *CommentLikesHandler) handleInsert(ctx context.Context, msg *CanalMessag
 	})
 
 	userSetKey := consts.PostCommentLikeUserSetKey + strconv.FormatUint(commentID, 10)
-	if err := redis.SAdd(context.Background(), userSetKey, userID); err != nil {
+	if err := redis.SAdd(ctx, userSetKey, userID); err != nil {
 		return err
 	}
-	if err := redis.Expire(context.Background(), userSetKey, 7*24*time.Hour); err != nil {
+	if err := redis.Expire(ctx, userSetKey, 7*24*time.Hour); err != nil {
 		return err
 	}
 
@@ -104,7 +104,7 @@ func (s *CommentLikesHandler) handleDelete(ctx context.Context, msg *CanalMessag
 	})
 
 	userSetKey := consts.PostCommentLikeUserSetKey + strconv.FormatUint(commentID, 10)
-	if err := redis.SRem(context.Background(), userSetKey, userID); err != nil {
+	if err := redis.SRem(ctx, userSetKey, userID); err != nil {
 		return err
 	}
 	return nil

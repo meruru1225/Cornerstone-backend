@@ -139,24 +139,17 @@ func (s *PostActionRepoImpl) GetCommentByID(ctx context.Context, commentID uint6
 	return &comment, err
 }
 
-// GetRootCommentsByPostID 分页获取帖子的顶级评论
 func (s *PostActionRepoImpl) GetRootCommentsByPostID(ctx context.Context, postID uint64, limit, offset int) ([]*model.PostComment, error) {
 	var comments []*model.PostComment
+
 	err := s.db.WithContext(ctx).
-		Preload("User", func(db *gorm.DB) *gorm.DB {
-			return db.Select("user_id, nickname, avatar_url")
-		}).
+		Joins("User").
+		Joins("ReplyUser").
 		Preload("SubComments", func(db *gorm.DB) *gorm.DB {
-			return db.Where("is_deleted = ?", false).Order("created_at ASC").Limit(3)
+			return db.Joins("User").Joins("ReplyUser").Order("created_at ASC")
 		}).
-		Preload("SubComments.User", func(db *gorm.DB) *gorm.DB {
-			return db.Select("user_id, nickname, avatar_url")
-		}).
-		Preload("SubComments.ReplyUser", func(db *gorm.DB) *gorm.DB {
-			return db.Select("user_id, nickname")
-		}).
-		Where("post_id = ? AND root_id = ? AND is_deleted = ?", postID, 0, false).
-		Order("created_at DESC").
+		Where("post_comments.post_id = ? AND post_comments.root_id = 0 AND post_comments.is_deleted = ?", postID, 0).
+		Order("post_comments.created_at DESC").
 		Limit(limit).Offset(offset).
 		Find(&comments).Error
 
@@ -195,17 +188,15 @@ func (s *PostActionRepoImpl) GetSubCommentCounts(ctx context.Context, rootIDs []
 // GetSubCommentsByRootID 获取某个根评论下的子评论
 func (s *PostActionRepoImpl) GetSubCommentsByRootID(ctx context.Context, rootID uint64, limit, offset int) ([]*model.PostComment, error) {
 	var comments []*model.PostComment
+
 	err := s.db.WithContext(ctx).
-		Preload("User", func(db *gorm.DB) *gorm.DB {
-			return db.Select("user_id, nickname, avatar_url")
-		}).
-		Preload("ReplyUser", func(db *gorm.DB) *gorm.DB {
-			return db.Select("user_id, nickname")
-		}).
-		Where("root_id = ? AND is_deleted = ?", rootID, false).
-		Order("created_at ASC").
+		Joins("User").
+		Joins("ReplyUser").
+		Where("post_comments.root_id = ? AND post_comments.is_deleted = ?", rootID, false).
+		Order("post_comments.created_at ASC").
 		Limit(limit).Offset(offset).
 		Find(&comments).Error
+
 	return comments, err
 }
 
