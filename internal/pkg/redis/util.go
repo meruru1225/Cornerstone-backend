@@ -127,6 +127,11 @@ func SAdd(ctx context.Context, key string, member interface{}) error {
 	return Rdb.SAdd(ctx, key, member).Err()
 }
 
+// SRem 移除集合成员
+func SRem(ctx context.Context, key string, members ...interface{}) error {
+	return Rdb.SRem(ctx, key, members...).Err()
+}
+
 // ZAdd 向有序集合添加一个或多个成员，或者更新已存在成员的分数
 func ZAdd(ctx context.Context, key string, score float64, member string) error {
 	return Rdb.ZAdd(ctx, key, redis.Z{Score: score, Member: member}).Err()

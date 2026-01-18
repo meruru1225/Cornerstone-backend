@@ -3,9 +3,11 @@ package kafka
 import (
 	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/mongo"
+	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -74,6 +76,15 @@ func (s *CommentLikesHandler) handleInsert(ctx context.Context, msg *CanalMessag
 		IsIncrement:    true,
 		NotifyFunc:     func() { s.sendCommentLikeNotification(ctx, userID, commentID) },
 	})
+
+	userSetKey := consts.PostCommentLikeUserSetKey + strconv.FormatUint(commentID, 10)
+	if err := redis.SAdd(context.Background(), userSetKey, userID); err != nil {
+		return err
+	}
+	if err := redis.Expire(context.Background(), userSetKey, 7*24*time.Hour); err != nil {
+		return err
+	}
+
 	return nil
 }
 
@@ -82,7 +93,8 @@ func (s *CommentLikesHandler) handleDelete(ctx context.Context, msg *CanalMessag
 	if len(msg.Data) == 0 {
 		return nil
 	}
-	commentID := StrToUint64(msg.Data[0]["comment_id"])
+	row := msg.Data[0]
+	userID, commentID := StrToUint64(row["user_id"]), StrToUint64(row["comment_id"])
 
 	ExecAction(ctx, ActionParams{
 		TargetID:       commentID,
@@ -91,11 +103,14 @@ func (s *CommentLikesHandler) handleDelete(ctx context.Context, msg *CanalMessag
 		IsIncrement:    false,
 	})
 
-	log.InfoContext(ctx, "comment unlike processed (Async Mode)", "commentID", commentID)
+	userSetKey := consts.PostCommentLikeUserSetKey + strconv.FormatUint(commentID, 10)
+	if err := redis.SRem(context.Background(), userSetKey, userID); err != nil {
+		return err
+	}
 	return nil
 }
 
-// sendCommentLikeNotification 通知逻辑保持不变
+// sendCommentLikeNotification 通知逻辑
 func (s *CommentLikesHandler) sendCommentLikeNotification(ctx context.Context, senderID, commentID uint64) {
 	comment, err := s.actionRepo.GetCommentByID(ctx, commentID)
 	if err != nil || comment == nil {
