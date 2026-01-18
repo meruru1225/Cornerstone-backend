@@ -18,6 +18,12 @@ type PostComment struct {
 	IsDeleted     bool      `gorm:"type:tinyint(1);not null;default:0" json:"isDeleted"`
 	CreatedAt     time.Time `json:"createdAt"`
 	UpdatedAt     time.Time `json:"updatedAt"`
+
+	// 冗余字段
+	User            UserDetail     `gorm:"foreignKey:UserID;references:UserID" json:"user"`
+	ReplyUser       UserDetail     `gorm:"foreignKey:ReplyToUserID;references:UserID" json:"replyUser"`
+	SubComments     []*PostComment `gorm:"foreignKey:RootID;references:ID" json:"subComments"`
+	SubCommentCount int64          `gorm:"not null;default:0" json:"subCommentCount"`
 }
 
 func (PostComment) TableName() string {

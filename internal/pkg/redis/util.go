@@ -3,6 +3,7 @@ package redis
 import (
 	"context"
 	"errors"
+	"strconv"
 	"time"
 
 	"github.com/goccy/go-json"
@@ -24,6 +25,41 @@ func GetValue(ctx context.Context, key string) (string, error) {
 		return "", err
 	}
 	return value, nil
+}
+
+// MGetValue 批量获取
+func MGetValue(ctx context.Context, keys ...string) (map[string]string, error) {
+	if len(keys) == 0 {
+		return make(map[string]string), nil
+	}
+	values, err := Rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return nil, nil
+		}
+		return nil, err
+	}
+
+	m := make(map[string]string)
+	for i, val := range values {
+		if val == nil {
+			continue
+		}
+		switch v := val.(type) {
+		case string:
+			m[keys[i]] = v
+		case []byte:
+			m[keys[i]] = string(v)
+		case int64:
+			m[keys[i]] = strconv.FormatInt(v, 10)
+		case float64:
+			m[keys[i]] = strconv.FormatFloat(v, 'f', -1, 64)
+		case bool:
+			m[keys[i]] = strconv.FormatBool(v)
+		}
+	}
+
+	return m, nil
 }
 
 // TryLock 设置键值对并设置过期时间

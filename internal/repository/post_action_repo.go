@@ -24,12 +24,13 @@ type PostActionRepo interface {
 	UpdateCommentLikesCount(ctx context.Context, commentID uint64, count int) error
 	GetCommentByID(ctx context.Context, commentID uint64) (*model.PostComment, error)
 	GetRootCommentsByPostID(ctx context.Context, postID uint64, limit, offset int) ([]*model.PostComment, error)
+	GetSubCommentCounts(ctx context.Context, rootIDs []uint64) (map[uint64]int, error)
 	GetSubCommentsByRootID(ctx context.Context, rootID uint64, limit, offset int) ([]*model.PostComment, error)
 	GetSubCommentCountByRootID(ctx context.Context, rootID uint64) (int64, error)
 
 	CreateCommentLike(ctx context.Context, cl *model.CommentLike) error
 	DeleteCommentLike(ctx context.Context, userID, commentID uint64) error
-	CheckCommentLikeExists(ctx context.Context, userID, commentID uint64) (bool, error)
+	GetLikedCommentIDs(ctx context.Context, userID uint64, commentIDs []uint64) ([]uint64, error)
 	GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error)
 
 	CreateView(ctx context.Context, view *model.PostView) error
@@ -142,17 +143,65 @@ func (s *PostActionRepoImpl) GetCommentByID(ctx context.Context, commentID uint6
 func (s *PostActionRepoImpl) GetRootCommentsByPostID(ctx context.Context, postID uint64, limit, offset int) ([]*model.PostComment, error) {
 	var comments []*model.PostComment
 	err := s.db.WithContext(ctx).
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("user_id, nickname, avatar_url")
+		}).
+		Preload("SubComments", func(db *gorm.DB) *gorm.DB {
+			return db.Where("is_deleted = ?", false).Order("created_at ASC").Limit(3)
+		}).
+		Preload("SubComments.User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("user_id, nickname, avatar_url")
+		}).
+		Preload("SubComments.ReplyUser", func(db *gorm.DB) *gorm.DB {
+			return db.Select("user_id, nickname")
+		}).
 		Where("post_id = ? AND root_id = ? AND is_deleted = ?", postID, 0, false).
 		Order("created_at DESC").
 		Limit(limit).Offset(offset).
 		Find(&comments).Error
+
 	return comments, err
+}
+
+// GetSubCommentCounts 批量获取多个根评论的子评论数
+func (s *PostActionRepoImpl) GetSubCommentCounts(ctx context.Context, rootIDs []uint64) (map[uint64]int, error) {
+	type Result struct {
+		RootID uint64
+		Count  int
+	}
+	var results []Result
+	counts := make(map[uint64]int)
+
+	if len(rootIDs) == 0 {
+		return counts, nil
+	}
+
+	err := s.db.WithContext(ctx).Model(&model.PostComment{}).
+		Select("root_id, count(*) as count").
+		Where("root_id IN ? AND is_deleted = ?", rootIDs, false).
+		Group("root_id").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	for _, r := range results {
+		counts[r.RootID] = r.Count
+	}
+	return counts, nil
 }
 
 // GetSubCommentsByRootID 获取某个根评论下的子评论
 func (s *PostActionRepoImpl) GetSubCommentsByRootID(ctx context.Context, rootID uint64, limit, offset int) ([]*model.PostComment, error) {
 	var comments []*model.PostComment
 	err := s.db.WithContext(ctx).
+		Preload("User", func(db *gorm.DB) *gorm.DB {
+			return db.Select("user_id, nickname, avatar_url")
+		}).
+		Preload("ReplyUser", func(db *gorm.DB) *gorm.DB {
+			return db.Select("user_id, nickname")
+		}).
 		Where("root_id = ? AND is_deleted = ?", rootID, false).
 		Order("created_at ASC").
 		Limit(limit).Offset(offset).
@@ -179,12 +228,12 @@ func (s *PostActionRepoImpl) DeleteCommentLike(ctx context.Context, userID, comm
 		Delete(&model.CommentLike{}).Error
 }
 
-func (s *PostActionRepoImpl) CheckCommentLikeExists(ctx context.Context, userID, commentID uint64) (bool, error) {
-	var count int64
+func (s *PostActionRepoImpl) GetLikedCommentIDs(ctx context.Context, userID uint64, commentIDs []uint64) ([]uint64, error) {
+	var likedIDs []uint64
 	err := s.db.WithContext(ctx).Model(&model.CommentLike{}).
-		Where("user_id = ? AND comment_id = ?", userID, commentID).
-		Count(&count).Error
-	return count > 0, err
+		Where("user_id = ? AND comment_id IN ?", userID, commentIDs).
+		Pluck("comment_id", &likedIDs).Error
+	return likedIDs, err
 }
 
 func (s *PostActionRepoImpl) GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error) {

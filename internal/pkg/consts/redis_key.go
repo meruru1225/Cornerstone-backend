@@ -20,6 +20,7 @@ const (
 	PostCollectionKey           = "post:collection:"
 	PostCommentKey              = "post:comment:"
 	PostCommentLikeKey          = "post:comment:like:"
+	PostCommentLikeUserSetKey   = "post:comment:like:user:"
 	PostCommentLikeDirtyKey     = "post:comment:like:dirty"
 	PostViewKey                 = "post:view:"
 	PostReportKey               = "post:report:"

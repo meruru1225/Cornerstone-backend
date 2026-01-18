@@ -15,6 +15,7 @@ import (
 
 	"github.com/go-sql-driver/mysql"
 	"github.com/jinzhu/copier"
+	redisv9 "github.com/redis/go-redis/v9"
 )
 
 const (
@@ -44,7 +45,6 @@ type PostActionService interface {
 
 	LikeComment(ctx context.Context, userID, commentID uint64) error
 	CancelLikeComment(ctx context.Context, userID, commentID uint64) error
-	IsCommentLiked(ctx context.Context, userID, commentID uint64) (bool, error)
 	GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error)
 	SyncCommentLikesCount(ctx context.Context, commentID uint64, count int) error
 
@@ -164,6 +164,7 @@ func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64
 
 	var finalRootID uint64
 	var finalParentID uint64
+	var replyUserID uint64
 
 	if req.ParentID > 0 {
 		parent, err := s.actionRepo.GetCommentByID(ctx, req.ParentID)
@@ -175,6 +176,7 @@ func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64
 		}
 
 		finalParentID = parent.ID
+		replyUserID = parent.UserID
 
 		if parent.RootID == 0 {
 			finalRootID = parent.ID
@@ -184,18 +186,20 @@ func (s *postActionServiceImpl) CreateComment(ctx context.Context, userID uint64
 	} else {
 		finalRootID = 0
 		finalParentID = 0
+		replyUserID = 0
 	}
 
 	comment := &model.PostComment{
-		PostID:    req.PostID,
-		Content:   req.Content,
-		MediaInfo: make(model.MediaList, len(req.MediaInfo)),
-		UserID:    userID,
-		RootID:    finalRootID,
-		ParentID:  finalParentID,
-		Status:    CommentStatusPending,
-		CreatedAt: time.Now(),
-		UpdatedAt: time.Now(),
+		PostID:        req.PostID,
+		Content:       req.Content,
+		MediaInfo:     make(model.MediaList, len(req.MediaInfo)),
+		UserID:        userID,
+		RootID:        finalRootID,
+		ParentID:      finalParentID,
+		ReplyToUserID: replyUserID,
+		Status:        CommentStatusPending,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 
 	if err := copier.Copy(&comment.MediaInfo, req.MediaInfo); err != nil {
@@ -262,15 +266,31 @@ func (s *postActionServiceImpl) GetCommentsByPostID(ctx context.Context, postID 
 		return nil, err
 	}
 
+	var allIDs []uint64
+	rootIDs := make([]uint64, 0, len(rootComments))
+	for _, rc := range rootComments {
+		allIDs = append(allIDs, rc.ID)
+		rootIDs = append(rootIDs, rc.ID)
+		for _, sc := range rc.SubComments {
+			allIDs = append(allIDs, sc.ID)
+		}
+	}
+
+	currentUserID, _ := ctx.Value("userID").(uint64)
+
+	likesMap := s.batchGetLikes(ctx, allIDs, rootComments)
+	countMap, _ := s.actionRepo.GetSubCommentCounts(ctx, rootIDs)
+	isLikedMap := s.batchGetIsLiked(ctx, currentUserID, allIDs)
+
 	res := make([]*dto.CommentDTO, 0, len(rootComments))
 	for _, rc := range rootComments {
-		rootDTO := s.convertToCommentDTO(ctx, rc)
-		subCount, _ := s.actionRepo.GetSubCommentCountByRootID(ctx, rc.ID)
-		rootDTO.SubCommentCount = subCount
-		if subCount > 0 {
-			subs, _ := s.actionRepo.GetSubCommentsByRootID(ctx, rc.ID, 3, 0)
-			for _, sc := range subs {
-				rootDTO.SubComments = append(rootDTO.SubComments, s.convertToCommentDTO(ctx, sc))
+		rootDTO := s.convertToCommentDTO(rc, likesMap[rc.ID], isLikedMap[rc.ID])
+		rootDTO.SubCommentCount = int64(countMap[rc.ID])
+
+		if len(rc.SubComments) > 0 {
+			rootDTO.SubComments = make([]*dto.CommentDTO, 0, len(rc.SubComments))
+			for _, sc := range rc.SubComments {
+				rootDTO.SubComments = append(rootDTO.SubComments, s.convertToCommentDTO(sc, likesMap[sc.ID], isLikedMap[sc.ID]))
 			}
 		}
 		res = append(res, rootDTO)
@@ -283,9 +303,20 @@ func (s *postActionServiceImpl) GetSubComments(ctx context.Context, rootID uint6
 	if err != nil {
 		return nil, err
 	}
+
+	subIDs := make([]uint64, 0, len(subs))
+	for _, sc := range subs {
+		subIDs = append(subIDs, sc.ID)
+	}
+
+	currentUserID, _ := ctx.Value("userID").(uint64)
+
+	likesMap := s.batchGetLikes(ctx, subIDs, subs)
+	isLikedMap := s.batchGetIsLiked(ctx, currentUserID, subIDs)
+
 	res := make([]*dto.CommentDTO, 0, len(subs))
 	for _, sc := range subs {
-		res = append(res, s.convertToCommentDTO(ctx, sc))
+		res = append(res, s.convertToCommentDTO(sc, likesMap[sc.ID], isLikedMap[sc.ID]))
 	}
 	return res, nil
 }
@@ -316,13 +347,6 @@ func (s *postActionServiceImpl) CancelLikeComment(ctx context.Context, userID, c
 	return s.revokeAction(s.getCommentCheck(ctx, commentID), func() error {
 		return s.actionRepo.DeleteCommentLike(ctx, userID, commentID)
 	})
-}
-
-func (s *postActionServiceImpl) IsCommentLiked(ctx context.Context, userID, commentID uint64) (bool, error) {
-	if userID == 0 {
-		return false, nil
-	}
-	return s.actionRepo.CheckCommentLikeExists(ctx, userID, commentID)
 }
 
 func (s *postActionServiceImpl) GetCommentLikeCount(ctx context.Context, commentID uint64) (int64, error) {
@@ -470,22 +494,27 @@ func (s *postActionServiceImpl) getCommentCheck(ctx context.Context, commentID u
 	}
 }
 
-func (s *postActionServiceImpl) convertToCommentDTO(ctx context.Context, c *model.PostComment) *dto.CommentDTO {
+func (s *postActionServiceImpl) convertToCommentDTO(comment *model.PostComment, likesCount int, isLiked bool) *dto.CommentDTO {
 	dtoItem := &dto.CommentDTO{}
-	_ = copier.Copy(dtoItem, c)
-	_ = copier.Copy(&dtoItem.MediaInfo, &c.MediaInfo)
-	user, _ := s.userRepo.GetUserHomeInfoById(ctx, c.UserID)
-	if user != nil {
-		dtoItem.Nickname = user.Nickname
-		dtoItem.AvatarURL = minio.GetPublicURL(user.AvatarURL)
+	_ = copier.Copy(dtoItem, comment)
+	_ = copier.Copy(&dtoItem.MediaInfo, &comment.MediaInfo)
+
+	dtoItem.LikesCount = likesCount
+	dtoItem.IsLiked = isLiked
+
+	if comment.User.UserID != 0 {
+		dtoItem.Nickname = comment.User.Nickname
+		dtoItem.AvatarURL = minio.GetPublicURL(comment.User.AvatarURL)
 	}
-	if c.ReplyToUserID > 0 {
-		target, _ := s.userRepo.GetUserById(ctx, c.ReplyToUserID)
-		if target != nil {
-			dtoItem.ReplyToNickname = target.UserDetail.Nickname
-		}
+
+	if comment.ReplyToUserID != 0 && comment.ReplyUser.UserID != 0 {
+		dtoItem.ReplyToNickname = comment.ReplyUser.Nickname
 	}
-	dtoItem.CreatedAt = c.CreatedAt.Format("2006-01-02 15:04:05")
+
+	dtoItem.CreatedAt = comment.CreatedAt.Format("2006-01-02 15:04:05")
+
+	dtoItem.LikesCount = likesCount
+
 	for _, m := range dtoItem.MediaInfo {
 		m.MediaURL = minio.GetPublicURL(m.MediaURL)
 		if m.CoverURL != nil {
@@ -493,9 +522,82 @@ func (s *postActionServiceImpl) convertToCommentDTO(ctx context.Context, c *mode
 			m.CoverURL = &url
 		}
 	}
-	commentLikeKey := consts.PostCommentLikeKey + strconv.FormatUint(c.ID, 10)
-	if val, err := redis.GetInt64(ctx, commentLikeKey); err == nil {
-		dtoItem.LikesCount = int(val)
-	}
 	return dtoItem
+}
+
+func (s *postActionServiceImpl) batchGetLikes(ctx context.Context, ids []uint64, comments []*model.PostComment) map[uint64]int {
+	likesMap := make(map[uint64]int)
+	if len(ids) == 0 {
+		return likesMap
+	}
+
+	keys := make([]string, len(ids))
+	for i, id := range ids {
+		keys[i] = consts.PostCommentLikeKey + strconv.FormatUint(id, 10)
+	}
+	cacheData, _ := redis.MGetValue(ctx, keys...)
+
+	for _, comment := range comments {
+		key := consts.PostCommentLikeKey + strconv.FormatUint(comment.ID, 10)
+
+		if valStr, ok := cacheData[key]; ok {
+			count, _ := strconv.Atoi(valStr)
+			likesMap[comment.ID] = count
+		} else {
+			likesMap[comment.ID] = comment.LikesCount
+
+			go func(c *model.PostComment) {
+				k := consts.PostCommentLikeKey + strconv.FormatUint(c.ID, 10)
+				_ = redis.SetWithExpiration(context.Background(), k, c.LikesCount, cacheExpiration)
+			}(comment)
+		}
+	}
+	return likesMap
+}
+
+func (s *postActionServiceImpl) batchGetIsLiked(ctx context.Context, userID uint64, commentIDs []uint64) map[uint64]bool {
+	isLikedMap := make(map[uint64]bool)
+	if userID == 0 || len(commentIDs) == 0 {
+		return isLikedMap
+	}
+
+	pipe := redis.GetRdbClient().Pipeline()
+	cmds := make(map[uint64]*redisv9.BoolCmd)
+	for _, id := range commentIDs {
+		key := consts.PostCommentLikeUserSetKey + strconv.FormatUint(id, 10)
+		cmds[id] = pipe.SIsMember(ctx, key, userID)
+	}
+	_, _ = pipe.Exec(ctx)
+
+	var maybeUnlikedIDs []uint64
+	for id, cmd := range cmds {
+		isLiked, err := cmd.Result()
+		if err == nil && isLiked {
+			isLikedMap[id] = true
+		} else {
+			maybeUnlikedIDs = append(maybeUnlikedIDs, id)
+		}
+	}
+
+	if len(maybeUnlikedIDs) > 0 {
+		dbLikedIDs, err := s.actionRepo.GetLikedCommentIDs(ctx, userID, maybeUnlikedIDs)
+		if err == nil && len(dbLikedIDs) > 0 {
+			likedSet := make(map[uint64]struct{})
+			for _, id := range dbLikedIDs {
+				likedSet[id] = struct{}{}
+				isLikedMap[id] = true
+			}
+
+			go func(uid uint64, ids []uint64) {
+				bgCtx := context.Background()
+				for _, id := range ids {
+					key := consts.PostCommentLikeUserSetKey + strconv.FormatUint(id, 10)
+					_ = redis.SAdd(bgCtx, key, uid)
+					_ = redis.Expire(bgCtx, key, 24*time.Hour)
+				}
+			}(userID, dbLikedIDs)
+		}
+	}
+
+	return isLikedMap
 }

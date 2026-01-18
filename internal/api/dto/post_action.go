@@ -22,6 +22,7 @@ type CommentDTO struct {
 	ReplyToUserID   uint64           `json:"reply_to_user_id"`
 	ReplyToNickname string           `json:"reply_to_nickname"`
 	LikesCount      int              `json:"likes_count"`
+	IsLiked         bool             `json:"is_liked"`
 	CreatedAt       string           `json:"created_at"`
 
 	SubComments     []*CommentDTO `json:"sub_comments"`
