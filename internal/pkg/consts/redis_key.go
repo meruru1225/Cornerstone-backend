@@ -29,6 +29,7 @@ const (
 	UserContentMetrics30DaysKey = "user_content:metrics:30days:"
 	IMUserKey                   = "im:user:"
 	MediaTempKey                = "media:temp"
+	WebSocketTicketKey          = "ws:ticket:"
 )
 
 const (

@@ -522,7 +522,7 @@ func (s *postServiceImpl) toPostDTOByES(post *es.PostES) (*dto.PostDTO, error) {
 	out.UpdatedAt = post.UpdatedAt.Format("2006-01-02 15:04:05")
 	var mediaBaseDTO []*dto.MediasBaseDTO
 	for _, media := range post.Media {
-		url := minio.GetPublicURL(media.URL)
+		url := minio.GetPublicURL(*media.Cover)
 		mediaBaseDTO = append(mediaBaseDTO, &dto.MediasBaseDTO{
 			MimeType: media.Type,
 			MediaURL: minio.GetPublicURL(media.URL),

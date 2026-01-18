@@ -4,7 +4,6 @@ import (
 	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/pkg/response"
-	"Cornerstone/internal/pkg/security"
 	"Cornerstone/internal/service"
 	"context"
 	"encoding/base64"
@@ -15,6 +14,7 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 	"github.com/gorilla/websocket"
 )
 
@@ -30,19 +30,37 @@ func NewWsHandler(im service.IMService) *WsHandler {
 	return &WsHandler{imService: im}
 }
 
+func (s *WsHandler) GetWSTicket(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	ticket := uuid.NewString()
+	key := consts.WebSocketTicketKey + ticket
+	if err := redis.SetWithExpiration(c.Request.Context(), key, userID, time.Minute*5); err != nil {
+		response.Error(c, service.UnExpectedError)
+		return
+	}
+	response.Success(c, map[string]interface{}{
+		"ticket": ticket,
+	})
+}
+
 func (s *WsHandler) Connect(c *gin.Context) {
-	token := c.Query("token")
-	if token == "" {
+	ticket := c.Query("ticket")
+	if ticket == "" {
 		response.Error(c, service.UnauthorizedError)
 		return
 	}
-	claims, err := security.ValidateToken(token)
+
+	key := consts.WebSocketTicketKey + ticket
+	value, err := redis.GetValue(c.Request.Context(), key)
+	if err != nil || value == "" {
+		response.Error(c, service.UnauthorizedError)
+		return
+	}
+	userID, err := strconv.ParseUint(value, 10, 64)
 	if err != nil {
-		log.Warn("WS 鉴权失败", "err", err)
 		response.Error(c, service.UnauthorizedError)
 		return
 	}
-	userID := claims.UserID
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
 	if err != nil {

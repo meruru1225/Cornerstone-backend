@@ -53,9 +53,37 @@ func (s *UserFollowHandler) GetUserFollowersCount(c *gin.Context) {
 	response.Success(c, map[string]int64{"count": count})
 }
 
+func (s *UserFollowHandler) GetUserFollowersCountOther(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 64)
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+	count, err := s.userFollowSvc.GetUserFollowerCount(c, userID)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, map[string]int64{"count": count})
+}
+
 func (s *UserFollowHandler) GetUserFollowingCount(c *gin.Context) {
 	userId := c.GetUint64("user_id")
 	count, err := s.userFollowSvc.GetUserFollowingCount(c, userId)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	response.Success(c, map[string]int64{"count": count})
+}
+
+func (s *UserFollowHandler) GetUserFollowingCountOther(c *gin.Context) {
+	userID, err := strconv.ParseUint(c.Param("user_id"), 10, 64)
+	if err != nil {
+		response.Error(c, service.ErrParamInvalid)
+		return
+	}
+	count, err := s.userFollowSvc.GetUserFollowingCount(c, userID)
 	if err != nil {
 		response.Error(c, err)
 		return
