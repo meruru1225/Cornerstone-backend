@@ -143,17 +143,52 @@ func (s *PostActionRepoImpl) GetRootCommentsByPostID(ctx context.Context, postID
 	var comments []*model.PostComment
 
 	err := s.db.WithContext(ctx).
+		Select("post_comments.*").
 		Joins("User").
 		Joins("ReplyUser").
-		Preload("SubComments", func(db *gorm.DB) *gorm.DB {
-			return db.Joins("User").Joins("ReplyUser").Order("created_at ASC")
-		}).
-		Where("post_comments.post_id = ? AND post_comments.root_id = 0 AND post_comments.is_deleted = ?", postID, 0).
+		Where("post_comments.post_id = ? AND post_comments.root_id = ? AND post_comments.is_deleted = ?", postID, 0, 0).
 		Order("post_comments.created_at DESC").
 		Limit(limit).Offset(offset).
 		Find(&comments).Error
+	if err != nil || len(comments) == 0 {
+		return comments, err
+	}
 
-	return comments, err
+	rootIDs := make([]uint64, len(comments))
+	for i, rc := range comments {
+		rootIDs[i] = rc.ID
+	}
+
+	var subComments []*model.PostComment
+	subQuery := `
+		   SELECT t.*, 
+				  u.user_id AS User__user_id, u.nickname AS User__nickname, u.avatar_url AS User__avatar_url,
+				  ru.user_id AS ReplyUser__user_id, ru.nickname AS ReplyUser__nickname
+		   FROM (
+			  SELECT pc.*, 
+					 ROW_NUMBER() OVER (PARTITION BY pc.root_id ORDER BY pc.created_at) as rn
+			  FROM post_comments pc
+			  WHERE pc.root_id IN (?) AND pc.is_deleted = 0
+		   ) t
+		   LEFT JOIN user_detail u ON t.user_id = u.user_id
+		   LEFT JOIN user_detail ru ON t.reply_to_user_id = ru.user_id
+		   WHERE t.rn <= 2
+		`
+
+	err = s.db.WithContext(ctx).Raw(subQuery, rootIDs).Scan(&subComments).Error
+	if err != nil {
+		return comments, err
+	}
+
+	subMap := make(map[uint64][]*model.PostComment)
+	for _, sc := range subComments {
+		subMap[sc.RootID] = append(subMap[sc.RootID], sc)
+	}
+	for _, rc := range comments {
+		rc.SubComments = subMap[rc.ID]
+	}
+
+	return comments, nil
 }
 
 // GetSubCommentCounts 批量获取多个根评论的子评论数
