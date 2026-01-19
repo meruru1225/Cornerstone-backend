@@ -18,7 +18,8 @@ func NewGormDB(cfg *config.DBConfig) (*gorm.DB, error) {
 	dialector = mysql.Open(cfg.DSN)
 
 	db, err := gorm.Open(dialector, &gorm.Config{
-		Logger: logger.NewGormLogger(),
+		Logger:      logger.NewGormLogger(),
+		PrepareStmt: true,
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database connection: %w", err)

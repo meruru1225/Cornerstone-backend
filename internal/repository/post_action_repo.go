@@ -3,7 +3,9 @@ package repository
 import (
 	"Cornerstone/internal/model"
 	"context"
+	"errors"
 
+	"github.com/go-sql-driver/mysql"
 	"gorm.io/gorm"
 )
 
@@ -271,7 +273,17 @@ func (s *PostActionRepoImpl) GetCommentLikeCount(ctx context.Context, commentID 
 }
 
 func (s *PostActionRepoImpl) CreateView(ctx context.Context, view *model.PostView) error {
-	return s.db.WithContext(ctx).Create(view).Error
+	err := s.db.WithContext(ctx).Create(view).Error
+	if err != nil {
+		var mysqlErr *mysql.MySQLError
+		if errors.As(err, &mysqlErr) {
+			if mysqlErr.Number == 1062 {
+				return nil
+			}
+		}
+		return err
+	}
+	return nil
 }
 
 func (s *PostActionRepoImpl) GetLikeCountByPostID(ctx context.Context, postID uint64) (int64, error) {

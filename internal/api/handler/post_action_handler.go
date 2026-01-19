@@ -96,39 +96,42 @@ func (s *PostActionHandler) GetPostActionState(c *gin.Context) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		state.LikeCount, _ = s.actionSvc.GetPostLikeCount(gCtx, postID)
-		return nil
+		state.LikeCount, err = s.actionSvc.GetPostLikeCount(gCtx, postID)
+		return err
 	})
 	g.Go(func() error {
-		state.CollectCount, _ = s.actionSvc.GetPostCollectionCount(gCtx, postID)
-		return nil
+		state.CollectCount, err = s.actionSvc.GetPostCollectionCount(gCtx, postID)
+		return err
 	})
 	g.Go(func() error {
-		state.CommentCount, _ = s.actionSvc.GetPostCommentCount(gCtx, postID)
-		return nil
+		state.CommentCount, err = s.actionSvc.GetPostCommentCount(gCtx, postID)
+		return err
 	})
 	g.Go(func() error {
-		state.ViewCount, _ = s.actionSvc.GetPostViewCount(gCtx, postID)
-		return nil
-	})
-	g.Go(func() error {
-		if userID > 0 {
-			state.IsLiked, _ = s.actionSvc.IsLiked(gCtx, userID, postID)
-		}
-		return nil
-	})
-	g.Go(func() error {
-		if userID > 0 {
-			state.IsCollected, _ = s.actionSvc.IsCollected(gCtx, userID, postID)
-		}
-		return nil
+		state.ViewCount, err = s.actionSvc.GetPostViewCount(gCtx, postID)
+		return err
 	})
 
-	_ = g.Wait()
+	if userID > 0 {
+		g.Go(func() error {
+			state.IsLiked, err = s.actionSvc.IsLiked(gCtx, userID, postID)
+			return err
+		})
+		g.Go(func() error {
+			state.IsCollected, err = s.actionSvc.IsCollected(gCtx, userID, postID)
+			return err
+		})
 
-	go func() {
-		_ = s.actionSvc.TrackPostView(c.Request.Context(), userID, postID)
-	}()
+		g.Go(func() error {
+			return s.actionSvc.TrackPostView(gCtx, userID, postID)
+		})
+	}
+
+	err = g.Wait()
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
 
 	response.Success(c, state)
 }
