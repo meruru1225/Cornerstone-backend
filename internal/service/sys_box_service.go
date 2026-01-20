@@ -2,6 +2,7 @@ package service
 
 import (
 	"Cornerstone/internal/api/dto"
+	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/repository"
 	"context"
@@ -54,7 +55,7 @@ func (s *sysBoxServiceImpl) GetNotificationList(ctx context.Context, userID uint
 			user, err := s.userRepo.GetUserHomeInfoById(ctx, m.SenderID)
 			if err == nil && user != nil {
 				d.SenderName = user.Nickname
-				d.AvatarURL = user.AvatarURL
+				d.AvatarURL = minio.GetPublicURL(user.AvatarURL)
 			}
 		} else {
 			d.SenderName = "系统通知"

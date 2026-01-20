@@ -102,7 +102,7 @@ func (s *UserRepoImpl) GetUserByPhone(ctx context.Context, phone string) (*model
 func (s *UserRepoImpl) GetUserHomeInfoById(ctx context.Context, id uint64) (*model.UserDetail, error) {
 	user := &model.UserDetail{}
 	result := s.db.WithContext(ctx).
-		Select("user_id", "nickname", "gender", "region", "avatar_url", "bio").
+		Select("user_id", "nickname", "gender", "region", "avatar_url", "bio", "birthday").
 		Where("user_id = ?", id).
 		First(&user)
 	if result.Error != nil {

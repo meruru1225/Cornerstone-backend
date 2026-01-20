@@ -44,9 +44,10 @@ type PostBatchLikesReq struct {
 	PostIDs []uint64 `json:"post_ids" binding:"required,min=1,max=100"`
 }
 
-// PostBatchLikesDTO 批量获取点赞数响应
-type PostBatchLikesDTO struct {
-	Likes map[uint64]int64 `json:"likes"`
+// PostLikeStateDTO 批量获取点赞数响应
+type PostLikeStateDTO struct {
+	LikeCount int64 `json:"like_count"`
+	IsLiked   bool  `json:"is_liked"`
 }
 
 // PostActionReq 点赞/收藏通用请求

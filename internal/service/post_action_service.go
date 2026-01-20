@@ -27,7 +27,7 @@ type PostActionService interface {
 	LikePost(ctx context.Context, userID, postID uint64) error
 	CancelLikePost(ctx context.Context, userID, postID uint64) error
 	GetPostLikeCount(ctx context.Context, postID uint64) (int64, error)
-	GetPostLikeCounts(ctx context.Context, postIDs []uint64) ([]int64, error)
+	GetPostLikeStates(ctx context.Context, postIDs []uint64) ([]*dto.PostLikeStateDTO, error)
 	IsLiked(ctx context.Context, userID, postID uint64) (bool, error)
 	GetLikedPosts(ctx context.Context, userID uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 
@@ -100,12 +100,65 @@ func (s *postActionServiceImpl) GetPostLikeCount(ctx context.Context, postID uin
 	return realCount, nil
 }
 
-func (s *postActionServiceImpl) GetPostLikeCounts(ctx context.Context, postIDs []uint64) ([]int64, error) {
-	counts := make([]int64, len(postIDs))
-	for i, id := range postIDs {
-		counts[i], _ = s.GetPostLikeCount(ctx, id)
+func (s *postActionServiceImpl) GetPostLikeStates(ctx context.Context, postIDs []uint64) ([]*dto.PostLikeStateDTO, error) {
+	if len(postIDs) == 0 {
+		return nil, nil
 	}
-	return counts, nil
+
+	userID, _ := ctx.Value("user_id").(uint64)
+	res := make([]*dto.PostLikeStateDTO, len(postIDs))
+
+	countKeys := make([]string, len(postIDs))
+	for i, id := range postIDs {
+		countKeys[i] = consts.PostLikeKey + strconv.FormatUint(id, 10)
+	}
+
+	countsMap, err := redis.MGetValue(ctx, countKeys...)
+	if err != nil {
+		return nil, err
+	}
+
+	var isLikedResults []bool
+	if userID > 0 {
+		isLikedResults = s.batchCheckPostIsLiked(ctx, userID, postIDs)
+	}
+
+	var missIDs []uint64
+	var missIndices []int
+
+	for i, id := range postIDs {
+		res[i] = &dto.PostLikeStateDTO{}
+
+		if userID > 0 {
+			res[i].IsLiked = isLikedResults[i]
+		}
+
+		key := countKeys[i]
+		if val, ok := countsMap[key]; ok {
+			res[i].LikeCount, _ = strconv.ParseInt(val, 10, 64)
+		} else {
+			missIDs = append(missIDs, id)
+			missIndices = append(missIndices, i)
+		}
+	}
+
+	if len(missIDs) > 0 {
+		realCountsMap, err := s.actionRepo.GetLikeCountsByPostIDs(ctx, missIDs)
+		if err == nil {
+			pipe := redis.GetRdbClient().Pipeline()
+			for i, id := range missIDs {
+				idx := missIndices[i]
+				count := realCountsMap[id]
+				res[idx].LikeCount = count
+
+				key := countKeys[idx]
+				pipe.Set(ctx, key, count, cacheExpiration)
+			}
+			_, _ = pipe.Exec(ctx)
+		}
+	}
+
+	return res, nil
 }
 
 func (s *postActionServiceImpl) IsLiked(ctx context.Context, userID, postID uint64) (bool, error) {
@@ -278,9 +331,9 @@ func (s *postActionServiceImpl) GetCommentsByPostID(ctx context.Context, postID 
 
 	currentUserID, _ := ctx.Value("user_id").(uint64)
 
-	likesMap := s.batchGetLikes(ctx, allIDs, rootComments)
+	likesMap := s.batchGetCommentLikes(ctx, allIDs, rootComments)
 	countMap, _ := s.actionRepo.GetSubCommentCounts(ctx, rootIDs)
-	isLikedMap := s.batchGetIsLiked(ctx, currentUserID, allIDs)
+	isLikedMap := s.batchGetCommentIsLiked(ctx, currentUserID, allIDs)
 
 	res := make([]*dto.CommentDTO, 0, len(rootComments))
 	for _, rc := range rootComments {
@@ -311,8 +364,8 @@ func (s *postActionServiceImpl) GetSubComments(ctx context.Context, rootID uint6
 
 	currentUserID, _ := ctx.Value("user_id").(uint64)
 
-	likesMap := s.batchGetLikes(ctx, subIDs, subs)
-	isLikedMap := s.batchGetIsLiked(ctx, currentUserID, subIDs)
+	likesMap := s.batchGetCommentLikes(ctx, subIDs, subs)
+	isLikedMap := s.batchGetCommentIsLiked(ctx, currentUserID, subIDs)
 
 	res := make([]*dto.CommentDTO, 0, len(subs))
 	for _, sc := range subs {
@@ -525,7 +578,7 @@ func (s *postActionServiceImpl) convertToCommentDTO(comment *model.PostComment, 
 	return dtoItem
 }
 
-func (s *postActionServiceImpl) batchGetLikes(ctx context.Context, ids []uint64, comments []*model.PostComment) map[uint64]int {
+func (s *postActionServiceImpl) batchGetCommentLikes(ctx context.Context, ids []uint64, comments []*model.PostComment) map[uint64]int {
 	likesMap := make(map[uint64]int)
 	if len(ids) == 0 {
 		return likesMap
@@ -555,7 +608,7 @@ func (s *postActionServiceImpl) batchGetLikes(ctx context.Context, ids []uint64,
 	return likesMap
 }
 
-func (s *postActionServiceImpl) batchGetIsLiked(ctx context.Context, userID uint64, commentIDs []uint64) map[uint64]bool {
+func (s *postActionServiceImpl) batchGetCommentIsLiked(ctx context.Context, userID uint64, commentIDs []uint64) map[uint64]bool {
 	isLikedMap := make(map[uint64]bool)
 	if userID == 0 || len(commentIDs) == 0 {
 		return isLikedMap
@@ -600,4 +653,23 @@ func (s *postActionServiceImpl) batchGetIsLiked(ctx context.Context, userID uint
 	}
 
 	return isLikedMap
+}
+
+// batchCheckPostIsLiked 利用 Pipeline 批量检查点赞状态
+func (s *postActionServiceImpl) batchCheckPostIsLiked(ctx context.Context, userID uint64, postIDs []uint64) []bool {
+	res := make([]bool, len(postIDs))
+	pipe := redis.GetRdbClient().Pipeline()
+
+	for _, postID := range postIDs {
+		userSetKey := consts.PostLikeUserSetKey + strconv.FormatUint(postID, 10)
+		pipe.SIsMember(ctx, userSetKey, userID)
+	}
+
+	cmds, _ := pipe.Exec(ctx)
+	for i, cmd := range cmds {
+		if isLiked, err := cmd.(*redisv9.BoolCmd).Result(); err == nil {
+			res[i] = isLiked
+		}
+	}
+	return res
 }

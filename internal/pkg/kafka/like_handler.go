@@ -3,9 +3,11 @@ package kafka
 import (
 	"Cornerstone/internal/pkg/consts"
 	"Cornerstone/internal/pkg/mongo"
+	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -77,6 +79,15 @@ func (s *LikesHandler) handleInsert(ctx context.Context, msg *CanalMessage) erro
 		NotifyFunc:     func() { s.sendLikeNotification(ctx, userID, postID) },
 	})
 
+	userSetKey := consts.PostLikeUserSetKey + strconv.FormatUint(postID, 10)
+	if err := redis.SAdd(ctx, userSetKey, userID); err != nil {
+		log.ErrorContext(ctx, "failed to sadd post like user set", "err", err)
+		return err
+	}
+	if err := redis.Expire(ctx, userSetKey, 7*24*time.Hour); err != nil {
+		return err
+	}
+
 	log.InfoContext(ctx, "post like inserted", "userID", userID, "postID", postID)
 	return nil
 }
@@ -86,7 +97,8 @@ func (s *LikesHandler) handleDelete(ctx context.Context, msg *CanalMessage) erro
 	if len(msg.Data) == 0 {
 		return nil
 	}
-	postID := StrToUint64(msg.Data[0]["post_id"])
+	row := msg.Data[0]
+	userID, postID := StrToUint64(row["user_id"]), StrToUint64(row["post_id"])
 
 	// 接入 ExecAction
 	ExecAction(ctx, ActionParams{
@@ -95,6 +107,12 @@ func (s *LikesHandler) handleDelete(ctx context.Context, msg *CanalMessage) erro
 		DirtyKey:       consts.PostDirtyKey,
 		IsIncrement:    false,
 	})
+
+	userSetKey := consts.PostLikeUserSetKey + strconv.FormatUint(postID, 10)
+	if err := redis.SRem(ctx, userSetKey, userID); err != nil {
+		log.ErrorContext(ctx, "failed to srem post like user set", "err", err)
+		return err
+	}
 
 	log.InfoContext(ctx, "post unlike processed", "postID", postID)
 	return nil

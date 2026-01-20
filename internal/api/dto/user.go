@@ -5,6 +5,7 @@ import "time"
 // UserDTO 用户
 type UserDTO struct {
 	UserID    *uint64    `json:"user_id,omitempty"`
+	Username  *string    `json:"username,omitempty"`
 	Phone     *string    `json:"phone,omitempty"`
 	Nickname  *string    `json:"nickname,omitempty"`
 	AvatarURL *string    `json:"avatar_url,omitempty"`

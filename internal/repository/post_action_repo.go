@@ -38,6 +38,7 @@ type PostActionRepo interface {
 	CreateView(ctx context.Context, view *model.PostView) error
 
 	GetLikeCountByPostID(ctx context.Context, postID uint64) (int64, error)
+	GetLikeCountsByPostIDs(ctx context.Context, postIDs []uint64) (map[uint64]int64, error)
 	GetCollectionCountByPostID(ctx context.Context, postID uint64) (int64, error)
 	GetCommentCountByPostID(ctx context.Context, postID uint64) (int64, error)
 	GetUserTotalLikes(ctx context.Context, userID uint64) (int64, error)
@@ -292,6 +293,36 @@ func (s *PostActionRepoImpl) GetLikeCountByPostID(ctx context.Context, postID ui
 		Where("post_id = ?", postID).
 		Count(&count).Error
 	return count, err
+}
+
+func (s *PostActionRepoImpl) GetLikeCountsByPostIDs(ctx context.Context, postIDs []uint64) (map[uint64]int64, error) {
+	if len(postIDs) == 0 {
+		return make(map[uint64]int64), nil
+	}
+
+	type Result struct {
+		PostID uint64
+		Count  int64
+	}
+	var results []Result
+
+	err := s.db.WithContext(ctx).
+		Model(&model.Like{}).
+		Select("post_id, count(*) as count").
+		Where("post_id IN (?)", postIDs).
+		Group("post_id").
+		Scan(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	countMap := make(map[uint64]int64, len(postIDs))
+	for _, r := range results {
+		countMap[r.PostID] = r.Count
+	}
+
+	return countMap, nil
 }
 
 func (s *PostActionRepoImpl) GetCollectionCountByPostID(ctx context.Context, postID uint64) (int64, error) {

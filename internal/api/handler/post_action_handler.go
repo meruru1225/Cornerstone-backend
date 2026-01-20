@@ -144,19 +144,13 @@ func (s *PostActionHandler) GetBatchLikes(c *gin.Context) {
 		return
 	}
 
-	counts, err := s.actionSvc.GetPostLikeCounts(c.Request.Context(), req.PostIDs)
+	res, err := s.actionSvc.GetPostLikeStates(c.Request.Context(), req.PostIDs)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
-	// 组装 map 返回，方便前端根据 post_id 直接取值
-	res := make(map[uint64]int64)
-	for i, pid := range req.PostIDs {
-		res[pid] = counts[i]
-	}
-
-	response.Success(c, dto.PostBatchLikesDTO{Likes: res})
+	response.Success(c, res)
 }
 
 // CreateComment 发布评论

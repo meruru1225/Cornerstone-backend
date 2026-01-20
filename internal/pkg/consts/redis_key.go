@@ -17,6 +17,7 @@ const (
 	UserInterestDirtyKey        = "user:interest:dirty"
 	PostDirtyKey                = "post:dirty"
 	PostLikeKey                 = "post:like:"
+	PostLikeUserSetKey          = "post:like:user:"
 	PostCollectionKey           = "post:collection:"
 	PostCommentKey              = "post:comment:"
 	PostCommentLikeKey          = "post:comment:like:"

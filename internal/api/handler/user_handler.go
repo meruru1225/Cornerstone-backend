@@ -246,6 +246,7 @@ func (s *UserHandler) UpdateUserInfo(c *gin.Context) {
 		return
 	}
 	userDTO.UserID = nil
+	userDTO.Username = nil
 	userDTO.Phone = nil
 	userDTO.AvatarURL = nil
 	userDTO.CreatedAt = nil
@@ -485,11 +486,33 @@ func (s *UserHandler) SearchUser(c *gin.Context) {
 		return
 	}
 
-	users, err := s.userSvc.SearchUser(c.Request.Context(), keyword, page, pageSize)
+	ctx := c.Request.Context()
+	users, err := s.userSvc.SearchUser(ctx, keyword, page, pageSize)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	// 精确匹配 ID
+	if parseUint, err := strconv.ParseUint(keyword, 10, 64); err == nil && page == 1 {
+		exactUser, err := s.userSvc.GetUserHomeInfoById(ctx, parseUint)
+		if err == nil && exactUser != nil {
+			foundIndex := -1
+			for i, u := range users {
+				if u.UserID == exactUser.UserID {
+					foundIndex = i
+					break
+				}
+			}
+			if foundIndex == -1 {
+				users = append([]*dto.UserDTO{exactUser}, users...)
+			} else if foundIndex > 0 {
+				target := users[foundIndex]
+				users = append(users[:foundIndex], users[foundIndex+1:]...)
+				users = append([]*dto.UserDTO{target}, users...)
+			}
+		}
+	}
+
 	response.Success(c, users)
 }
 
