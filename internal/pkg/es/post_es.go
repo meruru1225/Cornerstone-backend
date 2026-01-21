@@ -22,6 +22,8 @@ type PostES struct {
 	CollectsCount int           `json:"collects_count"`
 	CreatedAt     time.Time     `json:"created_at"`
 	UpdatedAt     time.Time     `json:"updated_at"`
+
+	Sort []interface{} `json:"-"`
 }
 
 // PostMediaES 对应 Mapping 中的 media 对象

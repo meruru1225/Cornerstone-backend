@@ -8,6 +8,7 @@ import (
 	"strconv"
 
 	"github.com/gin-gonic/gin"
+	"github.com/google/uuid"
 )
 
 type PostHandler struct {
@@ -21,15 +22,19 @@ func NewPostHandler(postSvc service.PostService) *PostHandler {
 }
 
 func (s *PostHandler) RecommendPost(c *gin.Context) {
-	userID := c.GetUint64("user_id")
-
-	var searchDTO dto.PostListDTO
-	if err := c.ShouldBindQuery(&searchDTO); err != nil {
+	var req dto.RecommendPostReq
+	if err := c.ShouldBindQuery(&req); err != nil {
 		response.Error(c, err)
 		return
 	}
+	if req.SessionID == "" {
+		req.SessionID = c.GetHeader("X-Session-ID")
+	}
+	if req.SessionID == "" {
+		req.SessionID = uuid.NewString()
+	}
 
-	posts, err := s.postSvc.RecommendPost(c.Request.Context(), userID, searchDTO.Page, searchDTO.PageSize)
+	posts, err := s.postSvc.RecommendPost(c.Request.Context(), req.SessionID, req.Cursor, req.PageSize)
 	if err != nil {
 		response.Error(c, err)
 		return

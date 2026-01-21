@@ -23,7 +23,7 @@ import (
 )
 
 type PostService interface {
-	RecommendPost(ctx context.Context, userID uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	RecommendPost(ctx context.Context, sessionID string, cursor string, pageSize int) (*dto.PostWaterfallDTO, error)
 	SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error
 	GetPostById(ctx context.Context, postID uint64) (*dto.PostDTO, error)
@@ -53,23 +53,23 @@ func NewPostService(postESRepo es.PostRepo, postDBRepo repository.PostRepo, user
 	}
 }
 
-func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page, pageSize int) (*dto.PostWaterfallDTO, error) {
-	key := consts.UserInterestKey + strconv.FormatUint(userID, 10)
-	from := (page - 1) * pageSize
+// RecommendPost 推荐流
+func (s *postServiceImpl) RecommendPost(ctx context.Context, sessionID string, cursor string, pageSize int) (*dto.PostWaterfallDTO, error) {
+	userID := ctx.Value("user_id").(uint64)
 
+	key := consts.UserInterestKey + strconv.FormatUint(userID, 10)
 	tags, _ := redis.ZRevRange(ctx, key, 0, 9)
 
+	// 冷启动
 	if len(tags) == 0 && userID > 0 {
 		userIDStr := strconv.FormatUint(userID, 10)
 		lockKey := consts.UserInterestInitLock + userIDStr
 		lockUUID := uuid.NewString()
 
-		ok, err := redis.TryLock(ctx, lockKey, lockUUID, 5, 0)
+		ok, err := redis.TryLock(ctx, lockKey, lockUUID, 5*time.Second, 0)
 		if err == nil && ok {
 			defer redis.UnLock(ctx, lockKey, lockUUID)
-
 			tags, _ = redis.ZRevRange(ctx, key, 0, 9)
-
 			if len(tags) == 0 {
 				snapshot, err := s.userInterestRepo.GetUserInterests(ctx, userID)
 				if err == nil && snapshot != nil && len(snapshot.Interests) > 0 {
@@ -81,61 +81,101 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page
 					for k, v := range snapshot.Interests {
 						ss = append(ss, kv{k, v})
 					}
-					// 按分数降序排列
 					sort.Slice(ss, func(i, j int) bool {
 						return ss[i].Value > ss[j].Value
 					})
-
-					// 回刷 Redis ZSet
 					for _, item := range ss {
 						_ = redis.ZAdd(ctx, key, float64(item.Value), item.Key)
 					}
 					_ = redis.ZRemRangeByRank(ctx, key, 0, -101)
 					_ = redis.Expire(ctx, key, 24*time.Hour)
-
-					// 填充本次查询需要的 tags
-					for i := 0; i < len(ss) && i < 10; i++ {
-						tags = append(tags, ss[i].Key)
-					}
+					tags, _ = redis.ZRevRange(ctx, key, 0, 9)
 				}
 			}
 		}
 	}
 
-	var finalPosts []*es.PostES
-	var err error
-
-	// 尝试推荐搜索
+	lastSortValues, err := util.DecodeCursor(cursor)
+	if err != nil {
+		log.ErrorContext(ctx, "decode cursor error", "err", err)
+		lastSortValues = nil
+	}
+	// 生成随机种子
+	seed := util.HashSessionID(sessionID)
+	var vector []float32
+	var interestText string
 	if len(tags) > 0 {
-		interestText := strings.Join(tags, " ")
-		vector, vErr := llm.GetVectorByString(ctx, interestText)
+		interestText = strings.Join(tags, " ")
+		timeoutCtx, cancel := context.WithTimeout(ctx, 500*time.Millisecond)
+		defer cancel()
+
+		v, vErr := llm.GetVectorByString(timeoutCtx, interestText)
 		if vErr != nil {
-			log.ErrorContext(ctx, "llm get vector error", "err", vErr)
+			log.WarnContext(ctx, "llm get vector failed or timeout", "err", vErr)
 		} else {
-			finalPosts, err = s.postESRepo.HybridSearch(ctx, interestText, vector, from, pageSize+1)
-			if err != nil {
-				log.ErrorContext(ctx, "hybrid search error", "err", err)
-			}
+			vector = v
 		}
 	}
 
-	// 如果推荐结果不足，获取最新帖子填充
-	if len(finalPosts) < pageSize+1 {
-		needed := (pageSize + 1) - len(finalPosts)
-		// 降级逻辑：获取最新的帖子列表
-		latestPosts, lErr := s.postESRepo.GetLatestPosts(ctx, from, needed)
-		if lErr == nil {
-			// 简单去重
-			existMap := make(map[uint64]struct{})
-			for _, p := range finalPosts {
-				existMap[p.ID] = struct{}{}
-			}
+	fetchSize := pageSize * 2
+	var candidates []*es.PostES
+	isFallbackMode := false
+	if len(lastSortValues) == 1 {
+		isFallbackMode = true
+	}
+	if !isFallbackMode {
+		candidates, err = s.postESRepo.RecommendPosts(ctx, interestText, vector, lastSortValues, fetchSize, seed)
+		if err != nil {
+			candidates = []*es.PostES{}
+		}
+	}
+
+	targetSize := pageSize + 1
+	finalPosts := make([]*es.PostES, 0, targetSize)
+	addedMap := make(map[uint64]struct{})
+	viewedKey := consts.UserViewedKey + strconv.FormatUint(userID, 10)
+	rdb := redis.GetRdbClient()
+
+	for _, post := range candidates {
+		isViewed, _ := rdb.SIsMember(ctx, viewedKey, post.ID).Result()
+		if isViewed {
+			continue
+		}
+
+		finalPosts = append(finalPosts, post)
+		addedMap[post.ID] = struct{}{}
+
+		if len(finalPosts) >= targetSize {
+			break
+		}
+	}
+
+	// 降级填充
+	if len(finalPosts) < targetSize {
+		needed := targetSize - len(finalPosts)
+		var latestPosts []*es.PostES
+		var err error
+
+		if isFallbackMode {
+			latestPosts, err = s.postESRepo.GetLatestPostsByCursor(ctx, lastSortValues, needed*2)
+		} else {
+			latestPosts, err = s.postESRepo.GetLatestPosts(ctx, 0, needed*3)
+		}
+
+		if err == nil {
 			for _, p := range latestPosts {
-				if _, ok := existMap[p.ID]; !ok {
-					finalPosts = append(finalPosts, p)
-					if len(finalPosts) >= pageSize+1 {
-						break
-					}
+				if _, ok := addedMap[p.ID]; ok {
+					continue
+				}
+				isViewed, _ := rdb.SIsMember(ctx, viewedKey, p.ID).Result()
+				if isViewed {
+					continue
+				}
+
+				finalPosts = append(finalPosts, p)
+				addedMap[p.ID] = struct{}{}
+				if len(finalPosts) >= targetSize {
+					break
 				}
 			}
 		}
@@ -147,18 +187,42 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, userID uint64, page
 		finalPosts = finalPosts[:pageSize]
 	}
 
+	// 记录已读
+	if len(finalPosts) > 0 && userID > 0 {
+		go func(ids []*es.PostES) {
+			pipe := redis.GetRdbClient().Pipeline()
+			bgCtx := context.Background()
+
+			for _, p := range ids {
+				pipe.SAdd(bgCtx, viewedKey, p.ID)
+			}
+			pipe.Expire(bgCtx, viewedKey, 72*time.Hour)
+			_, _ = pipe.Exec(bgCtx)
+		}(finalPosts)
+	}
+
 	dtoItems, err := s.batchToPostDTOByES(finalPosts)
 	if err != nil {
 		return nil, err
 	}
 
+	// 计算 Next Cursor
+	var nextCursor string
+	if len(finalPosts) > 0 {
+		lastPost := finalPosts[len(finalPosts)-1]
+		if len(lastPost.Sort) > 0 {
+			nextCursor = util.EncodeCursor(lastPost.Sort)
+		}
+	}
+
 	return &dto.PostWaterfallDTO{
-		List:    dtoItems,
-		HasMore: hasMore,
+		List:       dtoItems,
+		NextCursor: nextCursor,
+		HasMore:    hasMore,
 	}, nil
 }
 
-// SearchPost 搜索帖子
+// SearchPost 搜索流
 func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error) {
 	vector, err := llm.GetVectorByString(ctx, keyword)
 	if err != nil {
@@ -170,6 +234,18 @@ func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, 
 	return getWaterfallPosts(pageSize,
 		func() ([]*es.PostES, error) {
 			return s.postESRepo.HybridSearch(ctx, keyword, vector, from, pageSize+1)
+		},
+		s.batchToPostDTOByES,
+	)
+}
+
+// LastestPost 最新流
+func (s *postServiceImpl) LastestPost(ctx context.Context, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	from := (page - 1) * pageSize
+
+	return getWaterfallPosts(pageSize,
+		func() ([]*es.PostES, error) {
+			return s.postESRepo.GetLatestPosts(ctx, from, pageSize+1)
 		},
 		s.batchToPostDTOByES,
 	)

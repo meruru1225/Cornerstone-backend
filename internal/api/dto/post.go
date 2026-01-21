@@ -21,8 +21,9 @@ type PostDTO struct {
 
 // PostWaterfallDTO 帖子瀑布流
 type PostWaterfallDTO struct {
-	List    []*PostDTO `json:"list"`
-	HasMore bool       `json:"has_more"`
+	List       []*PostDTO `json:"list"`
+	NextCursor string     `json:"next_cursor,omitempty"`
+	HasMore    bool       `json:"has_more"`
 }
 
 // PostBaseDTO 帖子 - 新增或修改
@@ -46,6 +47,12 @@ type PostListDTO struct {
 	Keyword  string `form:"keyword"`
 	Page     int    `form:"page,default=1"`
 	PageSize int    `form:"page_size,default=20"`
+}
+
+type RecommendPostReq struct {
+	Cursor    string `form:"cursor"`
+	PageSize  int    `form:"page_size,default=10"`
+	SessionID string `form:"session_id"`
 }
 
 type PostDeleteDTO struct {

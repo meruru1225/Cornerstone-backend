@@ -15,6 +15,7 @@ const (
 	UserMetrics30DaysKey        = "user:metrics:30days:"
 	UserInterestKey             = "user:interest:"
 	UserInterestDirtyKey        = "user:interest:dirty"
+	UserViewedKey               = "user:viewed:"
 	PostDirtyKey                = "post:dirty"
 	PostLikeKey                 = "post:like:"
 	PostLikeUserSetKey          = "post:like:user:"
