@@ -22,9 +22,13 @@ import (
 	"github.com/jinzhu/copier"
 )
 
+// MaxOffsetLimit Elastic 深分页限制
+const MaxOffsetLimit = 10000
+
 type PostService interface {
 	RecommendPost(ctx context.Context, sessionID string, cursor string, pageSize int) (*dto.PostWaterfallDTO, error)
 	SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	LastestPost(ctx context.Context, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error
 	GetPostById(ctx context.Context, postID uint64) (*dto.PostDTO, error)
 	GetPost(ctx context.Context, userID uint64, postID uint64) (*dto.PostDTO, error)
@@ -224,6 +228,14 @@ func (s *postServiceImpl) RecommendPost(ctx context.Context, sessionID string, c
 
 // SearchPost 搜索流
 func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	if (page-1)*pageSize >= MaxOffsetLimit {
+		return &dto.PostWaterfallDTO{
+			List:       []*dto.PostDTO{},
+			HasMore:    false,
+			NextCursor: "",
+		}, nil
+	}
+
 	vector, err := llm.GetVectorByString(ctx, keyword)
 	if err != nil {
 		return nil, err
@@ -241,6 +253,14 @@ func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, 
 
 // LastestPost 最新流
 func (s *postServiceImpl) LastestPost(ctx context.Context, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	if (page-1)*pageSize >= MaxOffsetLimit {
+		return &dto.PostWaterfallDTO{
+			List:       []*dto.PostDTO{},
+			HasMore:    false,
+			NextCursor: "",
+		}, nil
+	}
+
 	from := (page - 1) * pageSize
 
 	return getWaterfallPosts(pageSize,
