@@ -18,6 +18,7 @@ type ConversationRepo interface {
 	IncrMaxSeq(ctx context.Context, convID uint64, lastMsg string, msgType int8, senderID uint64) (uint64, error)
 
 	GetUserConversationMemList(ctx context.Context, userID uint64) ([]*model.ConversationMember, error)
+	GetConvPeersReadSeq(ctx context.Context, convIDs []uint64, peerIDs []uint64) (map[uint64]uint64, error)
 	GetTotalUnreadCount(ctx context.Context, userID uint64) (int64, error)
 }
 
@@ -108,6 +109,7 @@ func (s *conversationRepoImpl) GetUserConversationMemList(ctx context.Context, u
 	err := s.db.WithContext(ctx).Table("conversation_members m").
 		Select("m.*, "+
 			"c.id AS `Conversation__id`, c.type AS `Conversation__type`, "+
+			"c.peer_key AS `Conversation__peer_key`, "+
 			"c.max_msg_seq AS `Conversation__max_msg_seq`, "+
 			"c.last_msg_content AS `Conversation__last_msg_content`, "+
 			"c.last_msg_type AS `Conversation__last_msg_type`, "+
@@ -119,6 +121,30 @@ func (s *conversationRepoImpl) GetUserConversationMemList(ctx context.Context, u
 		Order("m.is_pinned DESC, c.last_message_at DESC").
 		Find(&members).Error
 	return members, err
+}
+
+// GetConvPeersReadSeq 批量获取指定会话中对方的已读进度
+func (s *conversationRepoImpl) GetConvPeersReadSeq(ctx context.Context, convIDs []uint64, peerIDs []uint64) (map[uint64]uint64, error) {
+	type Result struct {
+		ConversationID uint64
+		ReadMsgSeq     uint64
+	}
+	var results []Result
+	// 查询条件：会话在列表内，且用户是我们的对手 ID 列表
+	err := s.db.WithContext(ctx).Table("conversation_members").
+		Select("conversation_id, read_msg_seq").
+		Where("conversation_id IN ? AND user_id IN ?", convIDs, peerIDs).
+		Find(&results).Error
+
+	if err != nil {
+		return nil, err
+	}
+
+	resMap := make(map[uint64]uint64)
+	for _, r := range results {
+		resMap[r.ConversationID] = r.ReadMsgSeq
+	}
+	return resMap, nil
 }
 
 // GetTotalUnreadCount 计算全局未读数

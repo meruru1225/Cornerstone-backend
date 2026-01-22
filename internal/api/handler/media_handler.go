@@ -39,6 +39,7 @@ func (s *MediaHandler) Upload(c *gin.Context) {
 	defer func() { _ = reader.Close() }()
 
 	contentType, err := util.GetSafeContentType(reader)
+	log.InfoContext(c.Request.Context(), "contentType", contentType)
 
 	isImage := strings.HasPrefix(contentType, consts.MimePrefixImage)
 	isVideo := strings.HasPrefix(contentType, consts.MimePrefixVideo)

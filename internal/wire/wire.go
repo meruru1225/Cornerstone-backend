@@ -69,7 +69,7 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	postService := service.NewPostService(postESRepo, postRepo, userInterestRepo)
 	postActionService := service.NewPostActionService(postActionRepo, postRepo, userRepo)
 	postMetricsService := service.NewPostMetricService(postMetricsRepo, postRepo)
-	IMService := service.NewIMService(conversationRepo, messageMongoRepo)
+	IMService := service.NewIMService(userRepo, conversationRepo, messageMongoRepo)
 	sysBoxService := service.NewSysBoxService(sysBoxRepo, userRepo)
 
 	handlers := &api.HandlersGroup{

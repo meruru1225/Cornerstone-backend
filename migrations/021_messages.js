@@ -29,23 +29,23 @@ currentDb.createCollection(collName, {
                 },
                 msg_type: {
                     bsonType: "int",
-                    enum: [1, 2, 3, 4, 5, 6],
-                    description: "消息类型: 1-文本, 2-图片, 3-语音, 4-视频, 5-文件, 6-撤回提醒"
+                    enum: [1, 2, 3],
+                    description: "消息类型: 1-正常消息, 2-音频消息, 3-撤回提醒"
                 },
                 content: {
                     bsonType: "string",
                     description: "文本内容或消息预览"
                 },
                 payload: {
-                    bsonType: "object",
+                    bsonType: "array",
                     description: "结构化媒体信息 (可选)",
                     properties: {
                         url: { bsonType: "string" },
                         width: { bsonType: "int" },
                         height: { bsonType: "int" },
-                        duration: { bsonType: "int" },
-                        size: { bsonType: "long" },
-                        ext: { bsonType: "string" }
+                        duration: { bsonType: "double" },
+                        mime_type: { bsonType: "string" },
+                        cover_url: { bsonType: "string" }
                     }
                 },
                 seq: {

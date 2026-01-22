@@ -11,6 +11,7 @@ import (
 // AuthOptionalMiddleware 可选鉴权：解析成功注入 UID，失败或缺失则 UID 为 0
 func AuthOptionalMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
+		var userID uint64
 		var token string
 
 		authHeader := c.GetHeader("Authorization")
@@ -24,20 +25,16 @@ func AuthOptionalMiddleware() gin.HandlerFunc {
 			}
 		}
 
-		if token == "" {
-			c.Set("user_id", uint64(0))
-			c.Next()
-			return
+		if token != "" {
+			if claims, err := security.ValidateToken(token); err == nil {
+				userID = claims.UserID
+			}
 		}
 
-		claims, err := security.ValidateToken(token)
-		if err != nil {
-			c.Set("user_id", uint64(0))
-		} else {
-			c.Set("user_id", claims.UserID)
-			newCtx := context.WithValue(c.Request.Context(), "user_id", claims.UserID)
-			c.Request = c.Request.WithContext(newCtx)
-		}
+		c.Set("user_id", userID)
+
+		newCtx := context.WithValue(c.Request.Context(), "user_id", userID)
+		c.Request = c.Request.WithContext(newCtx)
 
 		c.Next()
 	}

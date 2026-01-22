@@ -4,6 +4,7 @@ import (
 	"Cornerstone/internal/api/dto"
 	"Cornerstone/internal/model"
 	"Cornerstone/internal/pkg/consts"
+	"Cornerstone/internal/pkg/minio"
 	"Cornerstone/internal/pkg/mongo"
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
@@ -29,6 +30,7 @@ type IMService interface {
 }
 
 type imServiceImpl struct {
+	userRepo    repository.UserRepo
 	convRepo    repository.ConversationRepo
 	messageRepo mongo.MessageRepo
 	retryChan   chan *mongo.Message
@@ -37,8 +39,9 @@ type imServiceImpl struct {
 }
 
 // NewIMService 构造函数：初始化服务并启动异步校准工作池
-func NewIMService(convRepo repository.ConversationRepo, messageRepo mongo.MessageRepo) IMService {
+func NewIMService(userRepo repository.UserRepo, convRepo repository.ConversationRepo, messageRepo mongo.MessageRepo) IMService {
 	s := &imServiceImpl{
+		userRepo:    userRepo,
 		convRepo:    convRepo,
 		messageRepo: messageRepo,
 		retryChan:   make(chan *mongo.Message, 2048),
@@ -59,25 +62,17 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 	var convID = req.ConversationID
 	var targetID = req.TargetUserID
 
-	// 1确定会话 ID 与 目标用户 ID
+	// 确定会话 ID 与 目标用户 ID
 	if convID == 0 {
-		if targetID == 0 {
-			return nil, fmt.Errorf("target_user_id is required for new conversation")
-		}
 		id, err := s.GetOrCreateConversation(ctx, senderID, targetID, 1)
 		if err != nil {
 			return nil, err
 		}
 		convID = id
 	} else {
-		// 校验成员权限并解析 targetID
 		conv, err := s.convRepo.GetConversation(ctx, convID)
 		if err != nil {
 			return nil, err
-		}
-		isMember, _ := s.convRepo.IsMember(ctx, convID, senderID)
-		if !isMember {
-			return nil, fmt.Errorf("not a member of this conversation")
 		}
 		targetID, _ = s.parsePeerID(conv.PeerKey, senderID)
 	}
@@ -88,20 +83,38 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 		return nil, err
 	}
 
-	// 构造并存入 MongoDB
+	_ = s.convRepo.UpdateReadSeq(ctx, convID, senderID, newSeq)
+
+	var mongoPayload []mongo.Payload
+	if len(req.Payload) > 0 {
+		mongoPayload = make([]mongo.Payload, 0, len(req.Payload))
+		for _, p := range req.Payload {
+			mb := mongo.Payload{
+				MimeType: p.MimeType,
+				MediaURL: p.MediaURL,
+				Width:    p.Width,
+				Height:   p.Height,
+				Duration: p.Duration,
+			}
+			if p.CoverURL != nil {
+				mb.CoverURL = *p.CoverURL
+			}
+			mongoPayload = append(mongoPayload, mb)
+		}
+	}
+
 	msgModel := &mongo.Message{
 		ConversationID: convID,
 		SenderID:       senderID,
 		MsgType:        req.MsgType,
 		Content:        req.Content,
-		Payload:        mongo.MMap(req.Payload),
+		Payload:        mongoPayload,
 		Seq:            newSeq,
 		CreatedAt:      time.Now(),
 	}
 
-	writeCtx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-
 	if err := s.messageRepo.SaveMessage(writeCtx, msgModel); err != nil {
 		select {
 		case s.retryChan <- msgModel:
@@ -109,9 +122,7 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 		}
 	}
 
-	// 推送到接收者的【用户个人频道】
 	_ = s.publishMessageToRedis(context.Background(), msgModel, targetID)
-
 	return s.toMessageDTO(msgModel), nil
 }
 
@@ -204,7 +215,6 @@ func (s *imServiceImpl) SyncMessages(ctx context.Context, userID uint64, convID 
 	return res, nil
 }
 
-// GetConversationList 获取会话列表
 func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) ([]*dto.ConversationDTO, error) {
 	members, err := s.convRepo.GetUserConversationMemList(ctx, userID)
 	if err != nil {
@@ -212,10 +222,15 @@ func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) 
 	}
 
 	res := make([]*dto.ConversationDTO, 0, len(members))
+	peerIDs := make([]uint64, 0)
+	convIDs := make([]uint64, 0)
+
 	for _, m := range members {
 		d := &dto.ConversationDTO{
 			ConversationID: m.ConversationID,
 			Type:           m.Conversation.Type,
+			MyReadSeq:      m.ReadMsgSeq,
+			MaxSeq:         m.Conversation.MaxMsgSeq,
 			LastMsgContent: m.Conversation.LastMsgContent,
 			LastMsgType:    m.Conversation.LastMsgType,
 			LastSenderID:   m.Conversation.LastSenderID,
@@ -226,11 +241,38 @@ func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) 
 		}
 
 		if m.Conversation.Type == 1 {
-			peerID, _ := s.parsePeerID(m.Conversation.PeerKey, userID)
-			d.PeerID = peerID
+			pID, _ := s.parsePeerID(m.Conversation.PeerKey, userID)
+			d.PeerID = pID
+			peerIDs = append(peerIDs, pID)
+			convIDs = append(convIDs, m.ConversationID)
 		}
 		res = append(res, d)
 	}
+
+	if len(peerIDs) > 0 {
+		userMap := make(map[uint64]*model.UserDetail)
+		if users, err := s.userRepo.GetUserSimpleInfoByIds(ctx, peerIDs); err == nil {
+			for _, u := range users {
+				userMap[u.UserID] = u
+			}
+		}
+
+		peerReadMap, _ := s.convRepo.GetConvPeersReadSeq(ctx, convIDs, peerIDs)
+
+		for _, d := range res {
+			if u, ok := userMap[d.PeerID]; ok {
+				d.CoverURL = minio.GetPublicURL(u.AvatarURL)
+				d.Title = u.Nickname
+			}
+			// 填对方已读进度 (仅单聊)
+			if d.Type == 1 {
+				if seq, ok := peerReadMap[d.ConversationID]; ok {
+					d.PeerReadSeq = seq
+				}
+			}
+		}
+	}
+
 	return res, nil
 }
 
@@ -339,9 +381,30 @@ func (s *imServiceImpl) parsePeerID(peerKey string, currentUserID uint64) (uint6
 }
 
 func (s *imServiceImpl) toMessageDTO(m *mongo.Message) *dto.MessageDTO {
+	dtoPayload := make([]dto.MediasBaseDTO, 0, len(m.Payload))
+	for _, p := range m.Payload {
+		item := dto.MediasBaseDTO{
+			MimeType: p.MimeType,
+			MediaURL: minio.GetPublicURL(p.MediaURL),
+			Width:    p.Width,
+			Height:   p.Height,
+			Duration: p.Duration,
+		}
+		if p.CoverURL != "" {
+			url := minio.GetPublicURL(p.CoverURL)
+			item.CoverURL = &url
+		}
+		dtoPayload = append(dtoPayload, item)
+	}
+
 	return &dto.MessageDTO{
-		ID: m.ID, ConversationID: m.ConversationID, SenderID: m.SenderID,
-		MsgType: m.MsgType, Content: m.Content, Payload: m.Payload,
-		Seq: m.Seq, CreatedAt: m.CreatedAt,
+		ID:             m.ID,
+		ConversationID: m.ConversationID,
+		SenderID:       m.SenderID,
+		MsgType:        m.MsgType,
+		Content:        m.Content,
+		Payload:        dtoPayload,
+		Seq:            m.Seq,
+		CreatedAt:      m.CreatedAt,
 	}
 }
