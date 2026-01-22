@@ -61,20 +61,51 @@ func NewIMService(userRepo repository.UserRepo, convRepo repository.Conversation
 func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *dto.SendMessageReq) (*dto.MessageDTO, error) {
 	var convID = req.ConversationID
 	var targetID = req.TargetUserID
+	var hdelKeys []string
 
 	// 确定会话 ID 与 目标用户 ID
 	if convID == 0 {
+		if targetID == 0 {
+			return nil, fmt.Errorf("target_user_id is required for new conversation")
+		}
 		id, err := s.GetOrCreateConversation(ctx, senderID, targetID, 1)
 		if err != nil {
 			return nil, err
 		}
 		convID = id
 	} else {
+		// 校验成员权限并解析 targetID
 		conv, err := s.convRepo.GetConversation(ctx, convID)
 		if err != nil {
 			return nil, err
 		}
+		isMember, _ := s.convRepo.IsMember(ctx, convID, senderID)
+		if !isMember {
+			return nil, fmt.Errorf("not a member of this conversation")
+		}
 		targetID, _ = s.parsePeerID(conv.PeerKey, senderID)
+	}
+
+	mongoPayload := make([]mongo.Payload, 0, len(req.Payload))
+	for _, p := range req.Payload {
+		if p.MediaURL != "" {
+			hdelKeys = append(hdelKeys, p.MediaURL)
+		}
+		if p.CoverURL != nil && *p.CoverURL != "" {
+			hdelKeys = append(hdelKeys, *p.CoverURL)
+		}
+
+		mb := mongo.Payload{
+			MimeType: p.MimeType,
+			MediaURL: p.MediaURL,
+			Width:    p.Width,
+			Height:   p.Height,
+			Duration: p.Duration,
+		}
+		if p.CoverURL != nil {
+			mb.CoverURL = *p.CoverURL
+		}
+		mongoPayload = append(mongoPayload, mb)
 	}
 
 	// MySQL 原子定序
@@ -82,27 +113,9 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 	if err != nil {
 		return nil, err
 	}
-
 	_ = s.convRepo.UpdateReadSeq(ctx, convID, senderID, newSeq)
 
-	var mongoPayload []mongo.Payload
-	if len(req.Payload) > 0 {
-		mongoPayload = make([]mongo.Payload, 0, len(req.Payload))
-		for _, p := range req.Payload {
-			mb := mongo.Payload{
-				MimeType: p.MimeType,
-				MediaURL: p.MediaURL,
-				Width:    p.Width,
-				Height:   p.Height,
-				Duration: p.Duration,
-			}
-			if p.CoverURL != nil {
-				mb.CoverURL = *p.CoverURL
-			}
-			mongoPayload = append(mongoPayload, mb)
-		}
-	}
-
+	// 构造并存入 MongoDB
 	msgModel := &mongo.Message{
 		ConversationID: convID,
 		SenderID:       senderID,
@@ -115,6 +128,7 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 
 	writeCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
+
 	if err := s.messageRepo.SaveMessage(writeCtx, msgModel); err != nil {
 		select {
 		case s.retryChan <- msgModel:
@@ -122,7 +136,15 @@ func (s *imServiceImpl) SendMessage(ctx context.Context, senderID uint64, req *d
 		}
 	}
 
+	if len(hdelKeys) > 0 {
+		go func() {
+			_ = redis.HDel(context.Background(), consts.MediaTempKey, hdelKeys...)
+		}()
+	}
+
+	// 推送到接收者的【用户个人频道】
 	_ = s.publishMessageToRedis(context.Background(), msgModel, targetID)
+
 	return s.toMessageDTO(msgModel), nil
 }
 
