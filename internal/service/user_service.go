@@ -308,6 +308,8 @@ func (s *UserServiceImpl) GetUserByCondition(ctx context.Context, dto *dto.GetUs
 	}
 	if user != nil {
 		user.Password = nil
+		url := minio.GetPublicURL(user.UserDetail.AvatarURL)
+		user.UserDetail.AvatarURL = url
 		return []*model.User{user}, nil
 	}
 	for _, item := range userList {

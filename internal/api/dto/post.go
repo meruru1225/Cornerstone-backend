@@ -61,5 +61,5 @@ type PostDeleteDTO struct {
 }
 
 type PostUpdateDTO struct {
-	Status int `json:"status" binding:"required" validate:"oneof=0 1 2"`
+	Status int `json:"status" binding:"required" validate:"oneof=1 3"`
 }
