@@ -94,6 +94,19 @@ func (s *PostHandler) LastestPost(c *gin.Context) {
 	response.Success(c, post)
 }
 
+func (s *PostHandler) CountPostMe(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+
+	count, err := s.postSvc.GetPostCount(c.Request.Context(), userID)
+
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, gin.H{"count": count})
+}
+
 func (s *PostHandler) CreatePost(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 

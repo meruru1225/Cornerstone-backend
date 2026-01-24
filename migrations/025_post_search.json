@@ -32,10 +32,16 @@
           }
         }
       },
-      "content": {
+      "plain_content": {
         "type": "text",
         "analyzer": "ik_max_word",
-        "search_analyzer": "ik_smart"
+        "search_analyzer": "ik_smart",
+        "term_vector": "with_positions_offsets"
+      },
+      "content": {
+        "type": "text",
+        "index": false,
+        "store": true
       },
       "content_vector": {
         "type": "dense_vector",

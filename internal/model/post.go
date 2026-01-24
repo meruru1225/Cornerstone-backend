@@ -24,6 +24,9 @@ type Post struct {
 	CreatedAt     time.Time `json:"created_at"`
 	UpdatedAt     time.Time `json:"updated_at"`
 
+	// 纯文本字段，用于审批与向量化
+	PlainContent string `gorm:"type:mediumtext;<-;->:false" json:"-"`
+
 	User User `gorm:"foreignKey:UserID;references:ID" json:"-"`
 }
 

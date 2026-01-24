@@ -4,6 +4,7 @@ CREATE TABLE `posts`
     `user_id`         BIGINT     NOT NULL COMMENT '作者ID',
     `title`           VARCHAR(255)        DEFAULT NULL COMMENT '笔记标题',
     `content`         TEXT       NOT NULL COMMENT '笔记正文',
+    `plain_content`   TEXT       NOT NULL COMMENT '笔记正文 (纯文本，用于搜索和AI)',
     `media_list`      JSON                DEFAULT NULL COMMENT '笔记附带内容',
     `likes_count`     INT        NOT NULL DEFAULT 0 COMMENT '点赞数',
     `comments_count`  INT        NOT NULL DEFAULT 0 COMMENT '评论数',

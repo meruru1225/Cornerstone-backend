@@ -28,9 +28,10 @@ type PostWaterfallDTO struct {
 
 // PostBaseDTO 帖子 - 新增或修改
 type PostBaseDTO struct {
-	Title   string           `json:"title" binding:"required" validate:"min=1,max=255"`
-	Content string           `json:"content" binding:"required" validate:"min=1,max=1000"`
-	Medias  []*MediasBaseDTO `json:"medias" validate:"max=9"`
+	Title        string           `json:"title" binding:"required" validate:"min=1,max=255"`
+	Content      string           `json:"content" binding:"required" validate:"min=1,max=20000"`
+	PlainContent string           `json:"plain_content" binding:"required" validate:"min=1,max=2000"`
+	Medias       []*MediasBaseDTO `json:"medias" validate:"max=9"`
 }
 
 // MediasBaseDTO 媒体 - 基础

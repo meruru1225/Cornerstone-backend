@@ -90,7 +90,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 		return s.getUserDetailAndIndexES(ctx, post, canalMsg.TS)
 	}
 
-	tags := util.ExtractTags(post.Content)
+	tags := util.ExtractTags(post.PlainContent)
 	post.UserTags = tags
 
 	// LLM 处理文本和媒体
@@ -98,7 +98,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	for i := range post.Media {
 		mediaForLLM[i] = &post.Media[i]
 	}
-	r, err := s.contentProcesser.Process(ctx, post.Title, post.Content, mediaForLLM, false)
+	r, err := s.contentProcesser.Process(ctx, post.Title, post.PlainContent, mediaForLLM, false)
 	if err != nil {
 		return err
 	}
@@ -134,7 +134,7 @@ func (s *PostsHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) e
 	// LLM 切分向量
 	toLLMContent := &llm.Content{
 		Title:   &post.Title,
-		Content: post.Content,
+		Content: post.PlainContent,
 	}
 	vector, err := llm.GetVector(ctx, toLLMContent, aggress.Tags, aggress.Summary)
 	if err != nil {
@@ -190,6 +190,7 @@ func (s *PostsHandler) toESModel(message *CanalMessage) (*es.PostES, error) {
 		Status:        StrToInt(row["status"]),
 		Title:         StrToString(row["title"]),
 		Content:       StrToString(row["content"]),
+		PlainContent:  StrToString(row["plain_content"]),
 		Media:         mediaList,
 		CreatedAt:     StrToDateTime(row["created_at"]),
 		UpdatedAt:     StrToDateTime(row["updated_at"]),

@@ -17,6 +17,7 @@ type PostRepo interface {
 	GetPostByUserId(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostSelf(ctx context.Context, userId uint64, limit, offset int) ([]*model.Post, error)
 	GetPostsByStatusCursor(ctx context.Context, status int, lastID uint64, limit int) ([]*model.Post, error)
+	GetPostCount(ctx context.Context, userId uint64) (int64, error)
 	DeletePost(ctx context.Context, id uint64) error
 	UpdatePostContent(ctx context.Context, post *model.Post) error
 	UpdatePostStatus(ctx context.Context, id uint64, status int) error
@@ -152,6 +153,17 @@ func (s *PostRepoImpl) GetPostsByStatusCursor(ctx context.Context, status int, l
 	var posts []*model.Post
 	err := db.Order("id DESC").Limit(limit).Find(&posts).Error
 	return posts, err
+}
+
+func (s *PostRepoImpl) GetPostCount(ctx context.Context, userId uint64) (int64, error) {
+	var count int64
+
+	err := s.db.WithContext(ctx).
+		Model(&model.Post{}).
+		Where("user_id = ? AND is_deleted = ?", userId, false).
+		Count(&count).Error
+
+	return count, err
 }
 
 // GetPostMedias 从笔记 JSON 字段中直接提取媒体列表

@@ -128,6 +128,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.PUT("/:post_id", group.PostHandler.UpdatePostContent)
 				authGroup.DELETE("/:post_id", group.PostHandler.DeletePost)
 				authGroup.GET("/search/me", group.PostHandler.SearchPostMe)
+				authGroup.GET("/count/me", group.PostHandler.CountPostMe)
 				authGroup.GET("/self", group.PostHandler.GetPostSelf)
 			}
 

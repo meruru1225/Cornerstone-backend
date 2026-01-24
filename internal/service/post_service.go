@@ -37,6 +37,7 @@ type PostService interface {
 	GetPostByUserId(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	GetPostSelf(ctx context.Context, userId uint64, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	GetPostByTag(ctx context.Context, tag string, isMain bool, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	GetPostCount(ctx context.Context, userID uint64) (int64, error)
 	GetWarningPosts(ctx context.Context, lastID uint64, pageSize int) (*dto.PostWaterfallDTO, error)
 	UpdatePostStatus(ctx context.Context, postID uint64, status int) error
 	UpdatePostContent(ctx context.Context, userID uint64, postID uint64, postDTO *dto.PostBaseDTO) error
@@ -404,6 +405,15 @@ func (s *postServiceImpl) GetPostByTag(ctx context.Context, tag string, isMain b
 		},
 		s.batchToPostDTOByES,
 	)
+}
+
+func (s *postServiceImpl) GetPostCount(ctx context.Context, userID uint64) (int64, error) {
+	count, err := s.postDBRepo.GetPostCount(ctx, userID)
+	if err != nil {
+		return 0, err
+	}
+
+	return count, nil
 }
 
 // GetWarningPosts 获取所有待审核/警告状态的帖子

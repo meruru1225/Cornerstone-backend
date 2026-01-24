@@ -8,6 +8,7 @@ type PostES struct {
 	UserID        uint64        `json:"user_id"`
 	Status        int           `json:"status"`
 	Title         string        `json:"title"`
+	PlainContent  string        `json:"plain_content"`
 	Content       string        `json:"content"`
 	ContentVector []float32     `json:"content_vector,omitempty"`
 	MainTag       string        `json:"main_tag"`
