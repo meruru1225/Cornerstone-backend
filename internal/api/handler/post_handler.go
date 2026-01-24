@@ -59,6 +59,24 @@ func (s *PostHandler) SearchPost(c *gin.Context) {
 	response.Success(c, posts)
 }
 
+func (s *PostHandler) SearchPostMe(c *gin.Context) {
+	userID := c.GetUint64("user_id")
+	var searchDTO dto.PostListDTO
+
+	if err := c.ShouldBindQuery(&searchDTO); err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	posts, err := s.postSvc.SearchPostMe(c.Request.Context(), userID, searchDTO.Keyword, searchDTO.Page, searchDTO.PageSize)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, posts)
+}
+
 func (s *PostHandler) LastestPost(c *gin.Context) {
 	var searchDTO dto.PostListDTO
 

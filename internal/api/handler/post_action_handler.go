@@ -76,16 +76,21 @@ func (s *PostActionHandler) CollectPost(c *gin.Context) {
 	response.Success(c, nil)
 }
 
-// GetPostActionState 获取帖子详情页的全量交互状态并上报浏览
+// GetPostActionState 获取帖子详情页的全量交互状态并选择性上报浏览
 func (s *PostActionHandler) GetPostActionState(c *gin.Context) {
 	userID := c.GetUint64("user_id")
-	postID, err := strconv.ParseUint(c.Param("post_id"), 10, 64)
-	if err != nil || postID == 0 {
+
+	var req struct {
+		PostID    uint64 `form:"post_id" binding:"required"`
+		NeedTrack bool   `form:"need_track"`
+	}
+	err := c.ShouldBindQuery(&req)
+	if err != nil {
 		response.Error(c, service.ErrParamInvalid)
 		return
 	}
 
-	_, err = s.postSvc.GetPostById(c.Request.Context(), postID)
+	_, err = s.postSvc.GetPostById(c.Request.Context(), req.PostID)
 	if err != nil {
 		response.Error(c, err)
 		return
@@ -96,35 +101,37 @@ func (s *PostActionHandler) GetPostActionState(c *gin.Context) {
 	g, gCtx := errgroup.WithContext(ctx)
 
 	g.Go(func() error {
-		state.LikeCount, err = s.actionSvc.GetPostLikeCount(gCtx, postID)
+		state.LikeCount, err = s.actionSvc.GetPostLikeCount(gCtx, req.PostID)
 		return err
 	})
 	g.Go(func() error {
-		state.CollectCount, err = s.actionSvc.GetPostCollectionCount(gCtx, postID)
+		state.CollectCount, err = s.actionSvc.GetPostCollectionCount(gCtx, req.PostID)
 		return err
 	})
 	g.Go(func() error {
-		state.CommentCount, err = s.actionSvc.GetPostCommentCount(gCtx, postID)
+		state.CommentCount, err = s.actionSvc.GetPostCommentCount(gCtx, req.PostID)
 		return err
 	})
 	g.Go(func() error {
-		state.ViewCount, err = s.actionSvc.GetPostViewCount(gCtx, postID)
+		state.ViewCount, err = s.actionSvc.GetPostViewCount(gCtx, req.PostID)
 		return err
 	})
 
 	if userID > 0 {
 		g.Go(func() error {
-			state.IsLiked, err = s.actionSvc.IsLiked(gCtx, userID, postID)
+			state.IsLiked, err = s.actionSvc.IsLiked(gCtx, userID, req.PostID)
 			return err
 		})
 		g.Go(func() error {
-			state.IsCollected, err = s.actionSvc.IsCollected(gCtx, userID, postID)
+			state.IsCollected, err = s.actionSvc.IsCollected(gCtx, userID, req.PostID)
 			return err
 		})
 
-		g.Go(func() error {
-			return s.actionSvc.TrackPostView(gCtx, userID, postID)
-		})
+		if req.NeedTrack {
+			g.Go(func() error {
+				return s.actionSvc.TrackPostView(gCtx, userID, req.PostID)
+			})
+		}
 	}
 
 	err = g.Wait()

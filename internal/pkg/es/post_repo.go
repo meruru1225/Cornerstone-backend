@@ -19,6 +19,7 @@ import (
 
 type PostRepo interface {
 	HybridSearch(ctx context.Context, queryText string, queryVector []float32, from, size int) ([]*PostES, error)
+	HybridSearchMe(ctx context.Context, userID uint64, queryText string, queryVector []float32, from, size int) ([]*PostES, error)
 	RecommendPosts(ctx context.Context, queryText string, queryVector []float32, lastSortValues []interface{}, size int, seed int64) ([]*PostES, error)
 	GetPostById(ctx context.Context, id uint64) (*PostES, error)
 	GetPostByTag(ctx context.Context, tag string, isMain bool, from, size int) ([]*PostES, error)
@@ -66,6 +67,46 @@ func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, query
 					},
 				},
 				Filter: []types.Query{statusFilter},
+			},
+		}).
+		Source_(&types.SourceFilter{
+			Excludes: []string{"content_vector"},
+		}).
+		From(from).
+		Size(size)
+
+	return s.executeSearch(ctx, searchReq)
+}
+
+func (s *PostRepoImpl) HybridSearchMe(ctx context.Context, userID uint64, queryText string, queryVector []float32, from, size int) ([]*PostES, error) {
+	userFilter := types.Query{
+		Term: map[string]types.TermQuery{
+			"user_id": {Value: userID},
+		},
+	}
+	filters := []types.Query{userFilter}
+
+	searchReq := Client.Search().
+		Index(PostIndex).
+		Knn(types.KnnSearch{
+			Field:         "content_vector",
+			QueryVector:   queryVector,
+			K:             util.PtrInt(10),
+			NumCandidates: util.PtrInt(100),
+			Similarity:    util.PtrFloat32(0.6),
+			Filter:        filters,
+		}).
+		Query(&types.Query{
+			Bool: &types.BoolQuery{
+				Must: []types.Query{
+					{
+						MultiMatch: &types.MultiMatchQuery{
+							Query:  queryText,
+							Fields: []string{"title^2", "content"},
+						},
+					},
+				},
+				Filter: filters,
 			},
 		}).
 		Source_(&types.SourceFilter{

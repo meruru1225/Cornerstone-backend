@@ -28,6 +28,7 @@ const MaxOffsetLimit = 10000
 type PostService interface {
 	RecommendPost(ctx context.Context, sessionID string, cursor string, pageSize int) (*dto.PostWaterfallDTO, error)
 	SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	SearchPostMe(ctx context.Context, userID uint64, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	LastestPost(ctx context.Context, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error
 	GetPostById(ctx context.Context, postID uint64) (*dto.PostDTO, error)
@@ -246,6 +247,29 @@ func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, 
 	return getWaterfallPosts(pageSize,
 		func() ([]*es.PostES, error) {
 			return s.postESRepo.HybridSearch(ctx, keyword, vector, from, pageSize+1)
+		},
+		s.batchToPostDTOByES,
+	)
+}
+
+func (s *postServiceImpl) SearchPostMe(ctx context.Context, userID uint64, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error) {
+	if (page-1)*pageSize >= MaxOffsetLimit {
+		return &dto.PostWaterfallDTO{
+			List:    []*dto.PostDTO{},
+			HasMore: false,
+		}, nil
+	}
+
+	vector, err := llm.GetVectorByString(ctx, keyword)
+	if err != nil {
+		return nil, err
+	}
+
+	from := (page - 1) * pageSize
+
+	return getWaterfallPosts(pageSize,
+		func() ([]*es.PostES, error) {
+			return s.postESRepo.HybridSearchMe(ctx, userID, keyword, vector, from, pageSize+1)
 		},
 		s.batchToPostDTOByES,
 	)

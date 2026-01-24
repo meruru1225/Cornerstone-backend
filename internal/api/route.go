@@ -127,6 +127,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authGroup.POST("", group.PostHandler.CreatePost)
 				authGroup.PUT("/:post_id", group.PostHandler.UpdatePostContent)
 				authGroup.DELETE("/:post_id", group.PostHandler.DeletePost)
+				authGroup.GET("/search/me", group.PostHandler.SearchPostMe)
 				authGroup.GET("/self", group.PostHandler.GetPostSelf)
 			}
 
@@ -146,7 +147,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 				authOptActionGroup.GET("/comments/:post_id", group.PostActionHandler.GetComments)
 				authOptActionGroup.GET("/sub-comments/:root_id", group.PostActionHandler.GetSubComments)
 				authOptActionGroup.POST("/batch/likes", group.PostActionHandler.GetBatchLikes)
-				authOptActionGroup.GET("/state/:post_id", group.PostActionHandler.GetPostActionState)
+				authOptActionGroup.GET("/state", group.PostActionHandler.GetPostActionState)
 			}
 
 			authActionGroup := postActionGroup.Group("")
