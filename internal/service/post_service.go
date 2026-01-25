@@ -348,7 +348,15 @@ func (s *postServiceImpl) GetPost(ctx context.Context, userID uint64, PostID uin
 	}
 	if post == nil ||
 		(post.UserID != userID && post.Status != consts.PostStatusNormal) {
-		return nil, ErrPostNotFound
+		postByDB, err := s.postDBRepo.GetPostByAllStatus(ctx, PostID)
+		if err != nil {
+			return nil, err
+		}
+		if postByDB == nil ||
+			(postByDB.UserID != userID && postByDB.Status != consts.PostStatusNormal) {
+			return nil, ErrPostNotFound
+		}
+		return s.toPostDTO(postByDB)
 	}
 
 	go func(uid uint64, tags []string) {
