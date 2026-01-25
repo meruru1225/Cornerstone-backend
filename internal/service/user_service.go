@@ -560,7 +560,7 @@ func (s *UserServiceImpl) CancelUser(ctx context.Context, id uint64, token strin
 	if err != nil {
 		return err
 	}
-	if oldAvatar != "" {
+	if oldAvatar != "" && oldAvatar != consts.DefaultAvatarURL {
 		_ = minio.DeleteFile(ctx, oldAvatar)
 	}
 	idStr := strconv.FormatUint(id, 10)

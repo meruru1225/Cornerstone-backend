@@ -150,6 +150,21 @@ func ToCanalMessage(msg *sarama.ConsumerMessage, tableName string) (*CanalMessag
 	return &canalMsg, nil
 }
 
+// PublishUnreadCountUpdate 发布未读数更新通知
+func PublishUnreadCountUpdate(ctx context.Context, channelName string, receiverID uint64) error {
+	type UnreadCountUpdateMessage struct {
+		Type       string `json:"type"`
+		ReceiverID uint64 `json:"receiver_id"`
+	}
+
+	message := UnreadCountUpdateMessage{
+		Type:       "unread_count_update",
+		ReceiverID: receiverID,
+	}
+
+	return redis.Publish(ctx, channelName, message)
+}
+
 // ExecAction 提取出的通用执行逻辑：Redis 计数 + 脏标记 + 通知触发
 func ExecAction(ctx context.Context, p ActionParams) {
 	// Redis 计数更新

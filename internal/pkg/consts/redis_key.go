@@ -31,6 +31,7 @@ const (
 	UserContentMetrics7DaysKey  = "user_content:metrics:7days:"
 	UserContentMetrics30DaysKey = "user_content:metrics:30days:"
 	IMUserKey                   = "im:user:"
+	SysBoxUnreadNotifyChannel   = "sysbox:unread:"
 	MediaTempKey                = "media:temp"
 	WebSocketTicketKey          = "ws:ticket:"
 )

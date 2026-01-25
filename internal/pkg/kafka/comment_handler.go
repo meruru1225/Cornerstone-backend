@@ -10,6 +10,7 @@ import (
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
+	"strconv"
 	"sync/atomic"
 	"time"
 
@@ -160,6 +161,13 @@ func (s *CommentsHandler) sendCommentNotification(ctx context.Context, m *model.
 
 	if err := s.sysBoxRepo.CreateNotification(ctx, notification); err != nil {
 		log.ErrorContext(ctx, "failed to create comment notification", "id", m.ID, "err", err)
+		return
+	}
+
+	// 发布未读数更新通知到 Redis
+	channelName := consts.SysBoxUnreadNotifyChannel + strconv.FormatUint(receiverID, 10)
+	if err = PublishUnreadCountUpdate(ctx, channelName, receiverID); err != nil {
+		log.ErrorContext(ctx, "failed to publish unread count update", "receiverID", receiverID, "err", err)
 	}
 }
 

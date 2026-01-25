@@ -136,5 +136,12 @@ func (s *CommentLikesHandler) sendCommentLikeNotification(ctx context.Context, s
 
 	if err := s.sysBoxRepo.CreateNotification(ctx, notification); err != nil {
 		log.ErrorContext(ctx, "failed to create comment-like notification", "err", err)
+		return
+	}
+
+	// 发布未读数更新通知到 Redis
+	channelName := consts.SysBoxUnreadNotifyChannel + strconv.FormatUint(comment.UserID, 10)
+	if err = PublishUnreadCountUpdate(ctx, channelName, comment.UserID); err != nil {
+		log.ErrorContext(ctx, "failed to publish unread count update", "receiverID", comment.UserID, "err", err)
 	}
 }

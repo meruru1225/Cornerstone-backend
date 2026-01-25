@@ -6,6 +6,7 @@ import (
 	"Cornerstone/internal/repository"
 	"context"
 	log "log/slog"
+	"strconv"
 	"time"
 
 	"github.com/IBM/sarama"
@@ -127,5 +128,12 @@ func (s *CollectionsHandler) sendCollectionNotification(ctx context.Context, sen
 
 	if err := s.sysBoxRepo.CreateNotification(ctx, notification); err != nil {
 		log.ErrorContext(ctx, "failed to create collection notification", "postID", postID, "err", err)
+		return
+	}
+
+	// 发布未读数更新通知到 Redis
+	channelName := consts.SysBoxUnreadNotifyChannel + strconv.FormatUint(post.UserID, 10)
+	if err = PublishUnreadCountUpdate(ctx, channelName, post.UserID); err != nil {
+		log.ErrorContext(ctx, "failed to publish unread count update", "receiverID", post.UserID, "err", err)
 	}
 }

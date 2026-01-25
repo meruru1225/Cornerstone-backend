@@ -1,9 +1,15 @@
 package handler
 
 import (
+	"Cornerstone/internal/pkg/consts"
+	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/pkg/response"
 	"Cornerstone/internal/service"
+	"context"
+	"io"
+	log "log/slog"
 	"strconv"
+	"time"
 
 	"github.com/gin-gonic/gin"
 )
@@ -43,13 +49,50 @@ func (h *SysBoxHandler) GetNotificationList(c *gin.Context) {
 func (h *SysBoxHandler) GetUnreadCount(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 
-	unread, err := h.sysBoxService.GetUnreadCount(c.Request.Context(), userID)
+	c.Header("Content-Type", "text/event-stream")
+	c.Header("Cache-Control", "no-cache")
+	c.Header("Connection", "keep-alive")
+	c.Header("Transfer-Encoding", "chunked")
+
+	initialUnread, err := h.sysBoxService.GetUnreadCount(c.Request.Context(), userID)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
 
-	response.Success(c, unread)
+	c.SSEvent("", initialUnread)
+	c.Writer.Flush()
+
+	channelName := consts.SysBoxUnreadNotifyChannel + strconv.FormatUint(userID, 10)
+	pubsub := redis.Subscribe(context.Background(), channelName)
+	defer func() {
+		_ = pubsub.Close()
+	}()
+
+	redisCh := pubsub.Channel()
+
+	c.Stream(func(w io.Writer) bool {
+		select {
+		case <-c.Request.Context().Done():
+			log.InfoContext(c.Request.Context(), "SSE client disconnected", "userID", userID)
+			return false
+		case msg := <-redisCh:
+			if msg != nil {
+				latestUnread, err := h.sysBoxService.GetUnreadCount(c.Request.Context(), userID)
+				if err != nil {
+					return false
+				}
+				c.SSEvent("", latestUnread)
+				c.Writer.Flush()
+				return true
+			}
+			return false
+		case <-time.After(30 * time.Second):
+			c.SSEvent("ping", map[string]string{"status": "alive"})
+			c.Writer.Flush()
+			return true
+		}
+	})
 }
 
 // MarkRead 标记单条已读

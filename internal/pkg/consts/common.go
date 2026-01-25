@@ -9,3 +9,7 @@ const (
 const (
 	PostStatusNormal = 1
 )
+
+const (
+	DefaultAvatarURL = "default_avatar.png"
+)

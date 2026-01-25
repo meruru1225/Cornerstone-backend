@@ -115,6 +115,14 @@ func (s *UserFollowsHandler) sendFollowNotification(followerID, followingID uint
 	go func() {
 		if err := s.sysBoxRepo.CreateNotification(context.Background(), notification); err != nil {
 			log.Error("failed to create follow notification", "follower", followerID, "following", followingID, "err", err)
+			return
+		}
+
+		// 发布未读数更新通知到 Redis
+		ctx := context.Background()
+		channelName := consts.SysBoxUnreadNotifyChannel + strconv.FormatUint(followingID, 10)
+		if err := PublishUnreadCountUpdate(ctx, channelName, followingID); err != nil {
+			log.Error("failed to publish unread count update", "receiverID", followingID, "err", err)
 		}
 	}()
 }
