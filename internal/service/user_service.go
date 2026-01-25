@@ -189,6 +189,8 @@ func (s *UserServiceImpl) GetUserInfo(ctx context.Context, id uint64) (*dto.User
 	}
 	url := minio.GetPublicURL(user.UserDetail.AvatarURL)
 	userDTO.AvatarURL = &url
+	createdAt := user.CreatedAt.UTC()
+	userDTO.CreatedAt = &createdAt
 	return userDTO, nil
 }
 
@@ -311,12 +313,16 @@ func (s *UserServiceImpl) GetUserByCondition(ctx context.Context, dto *dto.GetUs
 	}
 	if user != nil {
 		user.Password = nil
+		user.CreatedAt = user.CreatedAt.UTC()
+		user.UpdatedAt = user.UpdatedAt.UTC()
 		url := minio.GetPublicURL(user.UserDetail.AvatarURL)
 		user.UserDetail.AvatarURL = url
 		return []*model.User{user}, nil
 	}
 	for _, item := range userList {
 		item.Password = nil
+		item.CreatedAt = item.CreatedAt.UTC()
+		item.UpdatedAt = item.UpdatedAt.UTC()
 		url := minio.GetPublicURL(item.UserDetail.AvatarURL)
 		item.UserDetail.AvatarURL = url
 	}
@@ -350,6 +356,9 @@ func (s *UserServiceImpl) UpdateUserInfo(ctx context.Context, id uint64, dto *dt
 	if err != nil {
 		return err
 	}
+	idStr := strconv.FormatUint(id, 10)
+	_ = redis.DeleteKey(ctx, consts.UserHomeInfoKey+idStr)
+	_ = redis.DeleteKey(ctx, consts.UserSimpleInfoKey+idStr)
 	return nil
 }
 

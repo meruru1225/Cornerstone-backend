@@ -492,8 +492,8 @@ func (s *postActionServiceImpl) expandPostList(ctx context.Context, ids []uint64
 			}
 		}
 
-		item.CreatedAt = post.CreatedAt.Format("2006-01-02 15:04:05")
-		item.UpdatedAt = post.UpdatedAt.Format("2006-01-02 15:04:05")
+		item.CreatedAt = post.CreatedAt.UTC().Format(time.RFC3339)
+		item.UpdatedAt = post.UpdatedAt.UTC().Format(time.RFC3339)
 		list = append(list, item)
 	}
 	return &dto.PostWaterfallDTO{List: list, HasMore: hasMore}, nil
@@ -564,7 +564,7 @@ func (s *postActionServiceImpl) convertToCommentDTO(comment *model.PostComment, 
 		dtoItem.ReplyToNickname = comment.ReplyUser.Nickname
 	}
 
-	dtoItem.CreatedAt = comment.CreatedAt.Format("2006-01-02 15:04:05")
+	dtoItem.CreatedAt = comment.CreatedAt.UTC().Format(time.RFC3339)
 
 	dtoItem.LikesCount = likesCount
 

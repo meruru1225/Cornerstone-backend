@@ -638,6 +638,9 @@ func (s *postServiceImpl) toPostDTO(post *model.Post) (*dto.PostDTO, error) {
 		out.AvatarURL = defaultAvatarUrl
 	}
 
+	out.CreatedAt = post.CreatedAt.UTC().Format(time.RFC3339)
+	out.UpdatedAt = post.UpdatedAt.UTC().Format(time.RFC3339)
+
 	return out, nil
 }
 
@@ -648,8 +651,8 @@ func (s *postServiceImpl) toPostDTOByES(post *es.PostES) (*dto.PostDTO, error) {
 	}
 	out.Nickname = post.UserNickname
 	out.AvatarURL = minio.GetPublicURL(post.UserAvatar)
-	out.CreatedAt = post.CreatedAt.Format("2006-01-02 15:04:05")
-	out.UpdatedAt = post.UpdatedAt.Format("2006-01-02 15:04:05")
+	out.CreatedAt = post.CreatedAt.UTC().Format(time.RFC3339)
+	out.UpdatedAt = post.UpdatedAt.UTC().Format(time.RFC3339)
 	var mediaBaseDTO []*dto.MediasBaseDTO
 	for _, media := range post.Media {
 		var url string

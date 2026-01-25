@@ -81,7 +81,7 @@ func StrToDate(v interface{}) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
-	t, _ := time.Parse("2006-01-02", s)
+	t, _ := time.ParseInLocation("2006-01-02", s, time.Local)
 	return t
 }
 
@@ -91,6 +91,6 @@ func StrToDateTime(v interface{}) time.Time {
 	if s == "" {
 		return time.Time{}
 	}
-	t, _ := time.Parse("2006-01-02 15:04:05", s)
-	return t
+	t, _ := time.ParseInLocation("2006-01-02 15:04:05", s, time.Local)
+	return t.UTC()
 }

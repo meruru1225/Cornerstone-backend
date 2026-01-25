@@ -202,7 +202,7 @@ func (s *imServiceImpl) GetChatHistory(ctx context.Context, userID uint64, convI
 					MsgType:        int(conv.LastMsgType),
 					SenderID:       conv.LastSenderID,
 					Seq:            conv.MaxMsgSeq,
-					CreatedAt:      conv.LastMessageAt,
+					CreatedAt:      conv.LastMessageAt.UTC(),
 				}
 				res := []*dto.MessageDTO{stub}
 				for _, m := range models {
@@ -256,7 +256,7 @@ func (s *imServiceImpl) GetConversationList(ctx context.Context, userID uint64) 
 			LastMsgContent: m.Conversation.LastMsgContent,
 			LastMsgType:    m.Conversation.LastMsgType,
 			LastSenderID:   m.Conversation.LastSenderID,
-			LastMessageAt:  m.Conversation.LastMessageAt,
+			LastMessageAt:  m.Conversation.LastMessageAt.UTC(),
 			UnreadCount:    m.UnreadCount,
 			IsMuted:        m.IsMuted == 1,
 			IsPinned:       m.IsPinned == 1,
@@ -427,6 +427,6 @@ func (s *imServiceImpl) toMessageDTO(m *mongo.Message) *dto.MessageDTO {
 		Content:        m.Content,
 		Payload:        dtoPayload,
 		Seq:            m.Seq,
-		CreatedAt:      m.CreatedAt,
+		CreatedAt:      m.CreatedAt.UTC(),
 	}
 }

@@ -7,6 +7,7 @@ import (
 	"Cornerstone/internal/repository"
 	"context"
 	"errors"
+	"time"
 
 	"github.com/jinzhu/copier"
 	"go.mongodb.org/mongo-driver/bson/primitive"
@@ -48,7 +49,7 @@ func (s *sysBoxServiceImpl) GetNotificationList(ctx context.Context, userID uint
 		d := &dto.SysBoxDTO{}
 		_ = copier.Copy(d, m)
 		d.ID = m.ID.Hex()
-		d.CreatedAt = m.CreatedAt.Format("2006-01-02 15:04:05")
+		d.CreatedAt = m.CreatedAt.UTC().Format(time.RFC3339)
 
 		// 补全发送者信息 (SenderID 为 0 代表系统发送)
 		if m.SenderID > 0 {

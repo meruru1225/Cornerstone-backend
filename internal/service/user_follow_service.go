@@ -149,7 +149,14 @@ func (s *UserFollowServiceImpl) getFollowListCommon(
 	limit := pageSize
 
 	if offset+limit > MaxCacheSize {
-		return fetchDB(ctx, userId, limit, offset)
+		dbData, err := fetchDB(ctx, userId, limit, offset)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range dbData {
+			item.CreatedAt = item.CreatedAt.UTC()
+		}
+		return dbData, nil
 	}
 
 	key := keyPrefix + strconv.FormatUint(userId, 10)
@@ -166,6 +173,9 @@ func (s *UserFollowServiceImpl) getFollowListCommon(
 	}
 	if len(dbData) == 0 {
 		return []*model.UserFollow{}, nil
+	}
+	for _, item := range dbData {
+		item.CreatedAt = item.CreatedAt.UTC()
 	}
 
 	go func(data []*model.UserFollow, cacheKey string, isFollower bool) {
@@ -239,11 +249,11 @@ func (s *UserFollowServiceImpl) zSetResToUserFollow(ownerId uint64, res []redisv
 		if isFollowerList {
 			item.FollowingID = ownerId
 			item.FollowerID = id
-			item.CreatedAt = time.Unix(int64(createdAt), 0)
+			item.CreatedAt = time.Unix(int64(createdAt), 0).UTC()
 		} else {
 			item.FollowerID = ownerId
 			item.FollowingID = id
-			item.CreatedAt = time.Unix(int64(createdAt), 0)
+			item.CreatedAt = time.Unix(int64(createdAt), 0).UTC()
 		}
 		userFollows = append(userFollows, item)
 	}
