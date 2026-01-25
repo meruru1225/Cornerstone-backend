@@ -22,6 +22,7 @@ import (
 
 type UserService interface {
 	Register(ctx context.Context, dto *dto.RegisterDTO) error
+	RegisterByPhone(ctx context.Context, regDTO *dto.RegisterByPhoneDTO) (string, error)
 	Login(ctx context.Context, dto *dto.CredentialDTO, isPhoneCode bool) (string, error)
 	Logout(ctx context.Context, token string) error
 	GetUserRoleNames(ctx context.Context, userID uint64) ([]string, error)
@@ -60,11 +61,8 @@ func NewUserService(userRepo repository.UserRepo, roleRepo repository.RoleRepo, 
 }
 
 func (s *UserServiceImpl) Register(ctx context.Context, regDTO *dto.RegisterDTO) error {
-	credentialDTO := &dto.CredentialDTO{}
-	if regDTO.Phone != nil {
-		credentialDTO.Account = *regDTO.Phone
-	} else {
-		credentialDTO.Account = *regDTO.Username
+	credentialDTO := &dto.CredentialDTO{
+		Account: *regDTO.Username,
 	}
 	findUser, err := s.findUserByLoginCredentials(ctx, credentialDTO)
 	if err != nil {
@@ -80,27 +78,11 @@ func (s *UserServiceImpl) Register(ctx context.Context, regDTO *dto.RegisterDTO)
 		return err
 	}
 
-	// username & password 形式注册
-	if regDTO.Password != nil {
-		passwordHash, err := security.HashPassword(*regDTO.Password)
-		if err != nil {
-			return err
-		}
-		user.Password = &passwordHash
+	passwordHash, err := security.HashPassword(*regDTO.Password)
+	if err != nil {
+		return err
 	}
-
-	// 手机号形式注册
-	if regDTO.Phone != nil {
-		key := consts.SmsCheckTokenKey + *regDTO.Phone
-		value, err := redis.GetValue(ctx, key)
-		if err != nil {
-			return err
-		}
-		if value != *regDTO.PhoneToken {
-			return ErrSmsRegTokenIncorrect
-		}
-		_ = redis.DeleteKey(ctx, key)
-	}
+	user.Password = &passwordHash
 
 	detail := &model.UserDetail{}
 	err = copier.Copy(detail, &regDTO)
@@ -120,6 +102,51 @@ func (s *UserServiceImpl) Register(ctx context.Context, regDTO *dto.RegisterDTO)
 	}
 
 	return nil
+}
+
+func (s *UserServiceImpl) RegisterByPhone(ctx context.Context, regDTO *dto.RegisterByPhoneDTO) (string, error) {
+	key := consts.SmsCheckTokenKey + *regDTO.Phone
+	value, err := redis.GetValue(ctx, key)
+	if err != nil {
+		return "", err
+	}
+	if value != *regDTO.PhoneToken {
+		return "", ErrSmsRegTokenIncorrect
+	}
+	_ = redis.DeleteKey(ctx, key)
+
+	user := &model.User{}
+	err = copier.Copy(user, &regDTO)
+	if err != nil {
+		return "", err
+	}
+
+	detail := &model.UserDetail{}
+	err = copier.Copy(detail, &regDTO)
+	if err != nil {
+		return "", err
+	}
+
+	role := model.UserRole{
+		UserID: user.ID,
+		RoleID: 1,
+	}
+	roles := []*model.UserRole{&role}
+
+	err = s.userRepo.CreateUser(ctx, user, detail, &roles)
+	if err != nil {
+		return "", err
+	}
+
+	roleNames, err := s.getRoleNamesForUser(ctx, user)
+	if err != nil {
+		return "", err
+	}
+	token, err := security.GenerateToken(user.ID, roleNames)
+	if err != nil {
+		return "", err
+	}
+	return token, nil
 }
 
 func (s *UserServiceImpl) Login(ctx context.Context, dto *dto.CredentialDTO, isByPassword bool) (string, error) {
@@ -400,9 +427,11 @@ func (s *UserServiceImpl) UpdatePasswordFromOld(ctx context.Context, id uint64, 
 	if user == nil {
 		return ErrUserNotFound
 	}
-	err = security.CheckPasswordHash(*dto.OldPassword, *user.Password)
-	if err != nil {
-		return ErrPasswordIncorrect
+	if user.Password != nil && *user.Password != "" {
+		err = security.CheckPasswordHash(*dto.OldPassword, *user.Password)
+		if err != nil {
+			return ErrPasswordIncorrect
+		}
 	}
 	passwordHash, err := security.HashPassword(*dto.NewPassword)
 	if err != nil {

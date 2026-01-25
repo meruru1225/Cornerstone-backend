@@ -53,6 +53,29 @@ func (s *UserHandler) Register(c *gin.Context) {
 	response.Success(c, nil)
 }
 
+func (s *UserHandler) RegisterByPhone(c *gin.Context) {
+	var registerDTO dto.RegisterByPhoneDTO
+	err := c.ShouldBind(&registerDTO)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	if err = util.ValidateDTO(&registerDTO); err != nil {
+		response.Error(c, err)
+		return
+	}
+	token, err := s.userSvc.RegisterByPhone(c.Request.Context(), &registerDTO)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+	s.setCookie(c, token, registerDTO.Remember)
+
+	response.Success(c, map[string]string{
+		"token": token,
+	})
+}
+
 func (s *UserHandler) SendSmsCode(c *gin.Context) {
 	var req dto.PhoneDTO
 	err := c.ShouldBind(&req)
@@ -217,13 +240,26 @@ func (s *UserHandler) ChangePhone(c *gin.Context) {
 }
 
 func (s *UserHandler) Logout(c *gin.Context) {
-	token := c.Request.Header.Get("Authorization")
-	token = strings.Replace(token, "Bearer ", "", 1)
-	err := s.userSvc.Logout(c.Request.Context(), token)
-	if err != nil {
-		response.Error(c, err)
-		return
+	var token string
+	cookieToken, err := c.Cookie("auth_token")
+	if err == nil && cookieToken != "" {
+		token = cookieToken
+	} else {
+		authHeader := c.Request.Header.Get("Authorization")
+		if authHeader != "" {
+			token = strings.Replace(authHeader, "Bearer ", "", 1)
+		}
 	}
+
+	if token != "" {
+		err := s.userSvc.Logout(c.Request.Context(), token)
+		if err != nil {
+			log.ErrorContext(c.Request.Context(), "failed to add token to blacklist", "err", err)
+		}
+	}
+
+	s.setCookieLogout(c)
+
 	response.Success(c, nil)
 }
 
@@ -296,13 +332,22 @@ func (s *UserHandler) UnbanUser(c *gin.Context) {
 
 func (s *UserHandler) CancelUser(c *gin.Context) {
 	userID := c.GetUint64("user_id")
-	token := c.Request.Header.Get("Authorization")
-	token = strings.Replace(token, "Bearer ", "", 1)
-	err := s.userSvc.CancelUser(c.Request.Context(), userID, token)
+	var token string
+	cookieToken, err := c.Cookie("auth_token")
+	if err == nil && cookieToken != "" {
+		token = cookieToken
+	} else {
+		authHeader := c.Request.Header.Get("Authorization")
+		if authHeader != "" {
+			token = strings.Replace(authHeader, "Bearer ", "", 1)
+		}
+	}
+	err = s.userSvc.CancelUser(c.Request.Context(), userID, token)
 	if err != nil {
 		response.Error(c, err)
 		return
 	}
+	s.setCookieLogout(c)
 	response.Success(c, nil)
 }
 
@@ -541,6 +586,24 @@ func (s *UserHandler) setCookie(c *gin.Context, token string, remember bool) {
 		"auth_token",
 		token,
 		maxAge,
+		"/",
+		domain,
+		isSecure,
+		true,
+	)
+}
+
+func (s *UserHandler) setCookieLogout(c *gin.Context) {
+	domain := config.Cfg.Server.Domain
+	if strings.Contains(c.Request.Host, "localhost") || strings.Contains(c.Request.Host, "127.0.0.1") {
+		domain = ""
+	}
+	isSecure := c.Request.TLS != nil || c.GetHeader("X-Forwarded-Proto") == "https"
+	c.SetSameSite(http.SameSiteLaxMode)
+	c.SetCookie(
+		"auth_token",
+		"",
+		-1,
 		"/",
 		domain,
 		isSecure,

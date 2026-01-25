@@ -196,9 +196,11 @@ func (s *UserRepoImpl) DeleteUser(ctx context.Context, id uint64) error {
 		Phone:    nil,
 	}
 
+	gender := uint8(0)
 	detailUpdate := model.UserDetail{
 		Nickname:  "已注销用户",
 		Bio:       nil,
+		Gender:    &gender,
 		AvatarURL: "default_avatar.png",
 		Region:    nil,
 		Birthday:  nil,

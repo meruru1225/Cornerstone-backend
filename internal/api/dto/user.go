@@ -28,13 +28,20 @@ type GetUserByConditionDTO struct {
 
 // RegisterDTO 注册
 type RegisterDTO struct {
-	// 方式一 使用 用户名&密码
 	Username *string `json:"username"`
 	Password *string `json:"password"`
+	Nickname string  `json:"nickname" validate:"required,min=1,max=15"`
+	Bio      *string `json:"bio"`
+	Gender   uint8   `json:"gender"`
+	Region   *string `json:"region"`
+	Birthday string  `json:"birthday" validate:"required,datetime=2006-01-02"`
+}
 
-	// 方式二 使用 手机号&临时签发令牌
+type RegisterByPhoneDTO struct {
 	Phone      *string `json:"phone"`
 	PhoneToken *string `json:"phone_token"`
+
+	Remember bool `json:"remember"`
 
 	Nickname string  `json:"nickname" validate:"required,min=1,max=15"`
 	Bio      *string `json:"bio"`
@@ -70,7 +77,7 @@ type ChangePhoneDTO struct {
 
 // ChangePasswordDTO 修改密码
 type ChangePasswordDTO struct {
-	OldPassword *string `json:"old_password" binding:"required" validate:"min=6,max=20"`
+	OldPassword *string `json:"old_password"`
 	NewPassword *string `json:"new_password" binding:"required" validate:"min=6,max=20"`
 }
 

@@ -45,6 +45,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			userGroup.POST("/login", group.UserHandler.Login)
 			userGroup.POST("/login/phone", group.UserHandler.LoginByPhone)
 			userGroup.POST("/register", group.UserHandler.Register)
+			userGroup.POST("/register/phone", group.UserHandler.RegisterByPhone)
 			userGroup.POST("/sms/send", group.UserHandler.SendSmsCode)
 			userGroup.PUT("/password/forget", group.UserHandler.ForgetPassword)
 			userGroup.GET("/:user_id/home", group.UserHandler.GetHomeInfo)
