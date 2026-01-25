@@ -93,6 +93,10 @@ func (s *UserFollowHandler) GetUserFollowingCountOther(c *gin.Context) {
 
 func (s *UserFollowHandler) GetSomeoneIsFollowing(c *gin.Context) {
 	userId := c.GetUint64("user_id")
+	if userId == 0 {
+		response.Success(c, false)
+	}
+
 	followingIdStr := c.Param("following_id")
 
 	if followingIdStr == "" {

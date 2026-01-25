@@ -82,17 +82,24 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 
 		userFollowGroup := apiGroup.Group("/user-relation")
 		{
-			userFollowGroup.Use(middleware.AuthMiddleware())
+			authOptionGroup := userFollowGroup.Group("")
+			authOptionGroup.Use(middleware.AuthOptionalMiddleware())
 			{
-				userFollowGroup.GET("/followers", group.UserFollowHandler.GetUserFollowers)
-				userFollowGroup.GET("/followers/count", group.UserFollowHandler.GetUserFollowersCount)
-				userFollowGroup.GET("/followers/count/:user_id", group.UserFollowHandler.GetUserFollowersCountOther)
-				userFollowGroup.GET("/followings", group.UserFollowHandler.GetUserFollowings)
-				userFollowGroup.GET("/followings/count", group.UserFollowHandler.GetUserFollowingCount)
-				userFollowGroup.GET("/followings/count/:user_id", group.UserFollowHandler.GetUserFollowingCountOther)
-				userFollowGroup.GET("/isfollow/:following_id", group.UserFollowHandler.GetSomeoneIsFollowing)
-				userFollowGroup.POST("/follow/:following_id", group.UserFollowHandler.Follow)
-				userFollowGroup.DELETE("/follow/:following_id", group.UserFollowHandler.Unfollow)
+				authOptionGroup.GET("/followers/count/:user_id", group.UserFollowHandler.GetUserFollowersCountOther)
+				authOptionGroup.GET("/followings/count/:user_id", group.UserFollowHandler.GetUserFollowingCountOther)
+
+				authOptionGroup.GET("/isfollow/:following_id", group.UserFollowHandler.GetSomeoneIsFollowing)
+			}
+
+			authGroup := userFollowGroup.Group("")
+			authGroup.Use(middleware.AuthMiddleware())
+			{
+				authGroup.GET("/followers", group.UserFollowHandler.GetUserFollowers)
+				authGroup.GET("/followers/count", group.UserFollowHandler.GetUserFollowersCount)
+				authGroup.GET("/followings", group.UserFollowHandler.GetUserFollowings)
+				authGroup.GET("/followings/count", group.UserFollowHandler.GetUserFollowingCount)
+				authGroup.POST("/follow/:following_id", group.UserFollowHandler.Follow)
+				authGroup.DELETE("/follow/:following_id", group.UserFollowHandler.Unfollow)
 			}
 		}
 
