@@ -6,7 +6,6 @@ import (
 	"fmt"
 	log "log/slog"
 	"net"
-	"strings"
 	"time"
 
 	"github.com/redis/go-redis/v9"
@@ -45,13 +44,11 @@ func (s *RedisLoggerHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook 
 
 		cmdName := cmd.Name()
 
-		var args string
-		if cmdName == "auth" || cmdName == "hello" {
-			args = "[PROTECTED]"
-		} else {
-			args = fmt.Sprint(cmd.Args())
+		if cmdName == "auth" || cmdName == "hello" || cmdName == "client" {
+			return err
 		}
 
+		args := fmt.Sprint(cmd.Args())
 		fields := []any{
 			log.String("command", cmdName),
 			log.String("args", args),
@@ -63,14 +60,12 @@ func (s *RedisLoggerHook) ProcessHook(next redis.ProcessHook) redis.ProcessHook 
 			if errors.Is(err, redis.Nil) || errMsg == "ERR no such key" {
 				return err
 			}
-			if cmdName == "client" && strings.Contains(errMsg, "setinfo") {
-				return err
-			}
-
 			log.ErrorContext(ctx, "Redis Error", append(fields, log.Any("err", err))...)
 		} else {
 			if elapsed > 100*time.Millisecond {
 				log.WarnContext(ctx, "Redis Slow", fields...)
+			} else {
+				log.InfoContext(ctx, "Redis Exec", fields...)
 			}
 		}
 

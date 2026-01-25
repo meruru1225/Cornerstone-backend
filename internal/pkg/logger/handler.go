@@ -10,12 +10,12 @@ type TeeHandler struct {
 	handlers []log.Handler
 }
 
-func (t *TeeHandler) Enabled(ctx context.Context, level log.Level) bool {
-	return t.handlers[0].Enabled(ctx, level)
+func (s *TeeHandler) Enabled(ctx context.Context, level log.Level) bool {
+	return s.handlers[0].Enabled(ctx, level)
 }
 
-func (t *TeeHandler) Handle(ctx context.Context, r log.Record) error {
-	for _, h := range t.handlers {
+func (s *TeeHandler) Handle(ctx context.Context, r log.Record) error {
+	for _, h := range s.handlers {
 		if err := h.Handle(ctx, r); err != nil {
 			return err
 		}
@@ -23,17 +23,17 @@ func (t *TeeHandler) Handle(ctx context.Context, r log.Record) error {
 	return nil
 }
 
-func (t *TeeHandler) WithAttrs(attrs []log.Attr) log.Handler {
-	newHandlers := make([]log.Handler, len(t.handlers))
-	for i, h := range t.handlers {
+func (s *TeeHandler) WithAttrs(attrs []log.Attr) log.Handler {
+	newHandlers := make([]log.Handler, len(s.handlers))
+	for i, h := range s.handlers {
 		newHandlers[i] = h.WithAttrs(attrs)
 	}
 	return &TeeHandler{handlers: newHandlers}
 }
 
-func (t *TeeHandler) WithGroup(name string) log.Handler {
-	newHandlers := make([]log.Handler, len(t.handlers))
-	for i, h := range t.handlers {
+func (s *TeeHandler) WithGroup(name string) log.Handler {
+	newHandlers := make([]log.Handler, len(s.handlers))
+	for i, h := range s.handlers {
 		newHandlers[i] = h.WithGroup(name)
 	}
 	return &TeeHandler{handlers: newHandlers}
@@ -43,11 +43,11 @@ type RemoteFilterHandler struct {
 	next log.Handler
 }
 
-func (h *RemoteFilterHandler) Enabled(ctx context.Context, level log.Level) bool {
-	return h.next.Enabled(ctx, level)
+func (s *RemoteFilterHandler) Enabled(ctx context.Context, level log.Level) bool {
+	return s.next.Enabled(ctx, level)
 }
 
-func (h *RemoteFilterHandler) Handle(ctx context.Context, r log.Record) error {
+func (s *RemoteFilterHandler) Handle(ctx context.Context, r log.Record) error {
 	// 检查日志记录中是否存在 trace_id 属性
 	hasTraceID := false
 	r.Attrs(func(a log.Attr) bool {
@@ -63,13 +63,13 @@ func (h *RemoteFilterHandler) Handle(ctx context.Context, r log.Record) error {
 		return nil
 	}
 
-	return h.next.Handle(ctx, r)
+	return s.next.Handle(ctx, r)
 }
 
-func (h *RemoteFilterHandler) WithAttrs(attrs []log.Attr) log.Handler {
-	return &RemoteFilterHandler{next: h.next.WithAttrs(attrs)}
+func (s *RemoteFilterHandler) WithAttrs(attrs []log.Attr) log.Handler {
+	return &RemoteFilterHandler{next: s.next.WithAttrs(attrs)}
 }
 
-func (h *RemoteFilterHandler) WithGroup(name string) log.Handler {
-	return &RemoteFilterHandler{next: h.next.WithGroup(name)}
+func (s *RemoteFilterHandler) WithGroup(name string) log.Handler {
+	return &RemoteFilterHandler{next: s.next.WithGroup(name)}
 }
