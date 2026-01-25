@@ -62,7 +62,7 @@ func (s *PostRepoImpl) HybridSearch(ctx context.Context, queryText string, query
 					{
 						MultiMatch: &types.MultiMatchQuery{
 							Query:  queryText,
-							Fields: []string{"title^2", "plain_content"},
+							Fields: []string{"title^2", "plain_content", "ai_summary"},
 						},
 					},
 				},
@@ -102,7 +102,7 @@ func (s *PostRepoImpl) HybridSearchMe(ctx context.Context, userID uint64, queryT
 					{
 						MultiMatch: &types.MultiMatchQuery{
 							Query:  queryText,
-							Fields: []string{"title^2", "plain_content"},
+							Fields: []string{"title^2", "plain_content", "ai_summary"},
 						},
 					},
 				},
@@ -132,7 +132,7 @@ func (s *PostRepoImpl) RecommendPosts(ctx context.Context, queryText string, que
 				{
 					MultiMatch: &types.MultiMatchQuery{
 						Query:  queryText,
-						Fields: []string{"user_tags^3", "title^2", "plain_content"},
+						Fields: []string{"user_tags^3", "title^2", "plain_content", "ai_summary"},
 					},
 				},
 			},
