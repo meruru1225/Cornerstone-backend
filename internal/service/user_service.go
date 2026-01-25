@@ -660,7 +660,7 @@ func (s *UserServiceImpl) changeUserIsBanStatus(ctx context.Context, id uint64, 
 }
 
 func (s *UserServiceImpl) getUserDetailLock(ctx context.Context, lockKey string, value string) error {
-	lock, err := redis.TryLock(ctx, lockKey, value, time.Second*5, 3)
+	lock, err := redis.TryLock(ctx, lockKey, value, 5*time.Second, 3)
 	if err != nil {
 		return err
 	}

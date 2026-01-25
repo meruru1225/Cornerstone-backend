@@ -587,7 +587,7 @@ func (s *postServiceImpl) RecordInterest(ctx context.Context, userID uint64, aiT
 			return
 		}
 		lockKey := consts.UserInterestInitLock + userIDStr
-		ok, err := redis.TryLock(ctx, lockKey, newUUID.String(), 5, 0)
+		ok, err := redis.TryLock(ctx, lockKey, newUUID.String(), 5*time.Second, 0)
 		if err != nil || !ok {
 			return
 		}

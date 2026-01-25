@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	log "log/slog"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
@@ -56,7 +57,7 @@ func (s *UserHandler) logic(ctx context.Context, msg *sarama.ConsumerMessage) er
 		id := canalMsg.Data[0]["id"]
 		lockKey := consts.UserDetailESLock + id.(string)
 		uuidStr := uuid.NewString()
-		_, err = redis.TryLock(ctx, lockKey, uuidStr, 30, -1)
+		_, err = redis.TryLock(ctx, lockKey, uuidStr, 30*time.Second, -1)
 		defer redis.UnLock(ctx, lockKey, uuidStr)
 		if err != nil {
 			return err

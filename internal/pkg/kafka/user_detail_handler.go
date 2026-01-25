@@ -9,6 +9,7 @@ import (
 	"fmt"
 	log "log/slog"
 	"strconv"
+	"time"
 
 	"github.com/IBM/sarama"
 	"github.com/google/uuid"
@@ -59,7 +60,7 @@ func (s *UserDetailHandler) logic(ctx context.Context, msg *sarama.ConsumerMessa
 	if canalMsg.Type == UPDATE {
 		lockKey := consts.UserDetailESLock + strconv.FormatUint(user.ID, 10)
 		uuidStr := uuid.NewString()
-		lock, err := redis.TryLock(ctx, lockKey, uuidStr, 30, 0)
+		lock, err := redis.TryLock(ctx, lockKey, uuidStr, 30*time.Second, 0)
 		defer redis.UnLock(ctx, lockKey, uuidStr)
 		if err != nil {
 			return err
@@ -74,6 +75,7 @@ func (s *UserDetailHandler) logic(ctx context.Context, msg *sarama.ConsumerMessa
 		if !exist {
 			return nil
 		}
+		return s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
 	} else if canalMsg.Type == INSERT {
 		return s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
 	}

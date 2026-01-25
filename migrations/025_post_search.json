@@ -1,11 +1,24 @@
 {
   "settings": {
+    "index.max_ngram_diff": 20,
     "number_of_shards": 3,
     "number_of_replicas": 1,
     "analysis": {
+      "filter": {
+        "ngram_filter": {
+          "type": "ngram",
+          "min_gram": 2,
+          "max_gram": 20
+        }
+      },
       "analyzer": {
-        "default": {
-          "type": "ik_max_word"
+        "mixed_analyzer": {
+          "type": "custom",
+          "tokenizer": "ik_max_word",
+          "filter": [
+            "lowercase",
+            "ngram_filter"
+          ]
         }
       }
     }
@@ -23,7 +36,7 @@
       },
       "title": {
         "type": "text",
-        "analyzer": "ik_max_word",
+        "analyzer": "mixed_analyzer",
         "search_analyzer": "ik_smart",
         "fields": {
           "suggestion": {
@@ -34,7 +47,7 @@
       },
       "plain_content": {
         "type": "text",
-        "analyzer": "ik_max_word",
+        "analyzer": "mixed_analyzer",
         "search_analyzer": "ik_smart",
         "term_vector": "with_positions_offsets"
       },
@@ -61,7 +74,7 @@
       },
       "ai_summary": {
         "type": "text",
-        "analyzer": "ik_max_word",
+        "analyzer": "mixed_analyzer",
         "search_analyzer": "ik_smart"
       },
       "media": {
