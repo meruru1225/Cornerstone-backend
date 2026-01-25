@@ -130,6 +130,9 @@ func (s *UserServiceImpl) Login(ctx context.Context, dto *dto.CredentialDTO, isB
 	if user == nil {
 		return "", ErrUserNotFound
 	}
+	if user.IsBan {
+		return "", ErrUserBan
+	}
 	if isByPassword {
 		if dto.Password == "" || user.Password == nil {
 			return "", ErrPasswordIncorrect
