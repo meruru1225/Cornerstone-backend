@@ -499,17 +499,17 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		return UnauthorizedError
 	}
 
-	newMediaMap := make(map[string]struct{})
+	newMediaMap := make(map[string]bool)
 	for _, m := range postDTO.Medias {
-		newMediaMap[m.MediaURL] = struct{}{}
+		newMediaMap[m.MediaURL] = true
 	}
 
 	var toDeleteKeys []string
 	for _, oldMedia := range oldPost.MediaList {
-		if _, exists := newMediaMap[oldMedia.MediaURL]; !exists {
+		if !newMediaMap[oldMedia.MediaURL] {
 			toDeleteKeys = append(toDeleteKeys, oldMedia.MediaURL)
 			if oldMedia.CoverURL != nil && *oldMedia.CoverURL != "" {
-				toDeleteKeys = append(toDeleteKeys, *oldMedia.CoverURL)
+				toDeleteKeys = append(toDeleteKeys, minio.GetPublicURL(*oldMedia.CoverURL))
 			}
 		}
 	}

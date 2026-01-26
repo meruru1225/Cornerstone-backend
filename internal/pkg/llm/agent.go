@@ -13,6 +13,9 @@ import (
 
 var tools = []llms.Tool{
 	DefineGeneralSearchTool(),
+	DefineGetPostURLTool(),
+	DefineWebSearchTool(),
+	DefineWebFetchTool(),
 }
 
 type Agent interface {
@@ -54,7 +57,7 @@ func (s *AgentImpl) ChatSingle(ctx context.Context, userInput string) chan strin
 	go func() {
 		defer close(out)
 
-		err := s.runAgentLoopStream(ctx, messages, out, 5)
+		err := s.runAgentLoopStream(ctx, messages, out, 30)
 		if err != nil {
 			out <- fmt.Sprintf("\n\n> ⚠️ **系统错误**: %v", err)
 		}
@@ -122,7 +125,7 @@ func (s *AgentImpl) Converse(ctx context.Context, question string, chatId string
 			return nil
 		}
 
-		_ = s.runAgentLoopWithCapture(ctx, messages, out, streamCapture, 5)
+		_ = s.runAgentLoopWithCapture(ctx, messages, out, streamCapture, 30)
 
 		if aiFullContent.Len() > 0 {
 			_ = s.agentMessageRepo.SaveMessage(persistenceCtx, &mongo.AgentMessage{

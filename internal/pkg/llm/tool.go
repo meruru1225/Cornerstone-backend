@@ -22,3 +22,66 @@ func DefineGeneralSearchTool() llms.Tool {
 		},
 	}
 }
+
+// DefineGetPostURLTool 定义获取站内帖子链接的工具
+func DefineGetPostURLTool() llms.Tool {
+	return llms.Tool{
+		Type: "function",
+		Function: &llms.FunctionDefinition{
+			Name:        "get_post_url",
+			Description: "获取指定站内帖子 ID 的官方访问链接。当你从 search_community_posts 中发现高质量内容并决定向用户推荐具体跳转地址时调用。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"post_id": map[string]any{
+						"type":        "integer",
+						"description": "帖子的唯一 ID (从搜索结果中获得)",
+					},
+				},
+				"required": []string{"post_id"},
+			},
+		},
+	}
+}
+
+// DefineWebSearchTool 定义 DuckDuckGo 搜索工具
+func DefineWebSearchTool() llms.Tool {
+	return llms.Tool{
+		Type: "function",
+		Function: &llms.FunctionDefinition{
+			Name:        "web_search",
+			Description: "使用 DuckDuckGo 搜索互联网上的实时信息、新闻或技术文档。当你需要站外广泛的背景知识时调用。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"query": map[string]any{
+						"type":        "string",
+						"description": "搜索关键词",
+					},
+				},
+				"required": []string{"query"},
+			},
+		},
+	}
+}
+
+// DefineWebFetchTool 定义网页内容抓取工具
+func DefineWebFetchTool() llms.Tool {
+	return llms.Tool{
+		Type: "function",
+		Function: &llms.FunctionDefinition{
+			Name:        "web_fetch",
+			Description: "抓取并阅读指定 URL 的网页详细正文内容。当搜索摘要信息不足以回答问题时调用。",
+			Parameters: map[string]any{
+				"type": "object",
+				"properties": map[string]any{
+					"url": map[string]any{
+						"type":        "string",
+						"description": "完整的网页 URL",
+					},
+				},
+				"required": []string{"url"},
+			},
+		},
+	}
+}

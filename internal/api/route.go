@@ -13,6 +13,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 	_ = r.SetTrustedProxies([]string{"localhost"})
 
 	// TraceId & Logger & CORS
+	r.Use(middleware.CommonMiddleware())
 	r.Use(middleware.TraceMiddleware())
 	r.Use(middleware.AuditMiddleware())
 	r.Use(middleware.CORSMiddleware())

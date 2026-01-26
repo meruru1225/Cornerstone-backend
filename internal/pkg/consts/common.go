@@ -12,4 +12,5 @@ const (
 
 const (
 	DefaultAvatarURL = "default_avatar.png"
+	BaseURL          = "post_base_url"
 )

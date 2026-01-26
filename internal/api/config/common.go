@@ -26,8 +26,9 @@ type Config struct {
 
 // ServerConfig Server配置
 type ServerConfig struct {
-	Port   int    `mapstructure:"port"`
-	Domain string `mapstructure:"domain"`
+	Port          int    `mapstructure:"port"`
+	Domain        string `mapstructure:"domain"`
+	SearchGateway string `mapstructure:"search_gateway"`
 }
 
 // DBConfig 数据库配置
