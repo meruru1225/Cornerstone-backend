@@ -1,4 +1,4 @@
-CREATE TABLE `user_daily_metrics`
+CREATE TABLE `user_metrics`
 (
     `id`                BIGINT   NOT NULL AUTO_INCREMENT COMMENT '记录ID',
     `user_id`           BIGINT   NOT NULL COMMENT '用户ID',
