@@ -4,6 +4,7 @@ CREATE TABLE `user_follows`
     `following_id` BIGINT   NOT NULL COMMENT '被关注者ID',
     `created_at`   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '关注时间',
     PRIMARY KEY (`follower_id`, `following_id`),
-    KEY `idx_following_id` (`following_id`)
+    KEY `idx_following_created` (`following_id`, `created_at` DESC),
+    KEY `idx_follower_created` (`follower_id`, `created_at` DESC)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='用户关注关系表 (M2M 自引用)';

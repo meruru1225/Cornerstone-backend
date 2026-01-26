@@ -14,3 +14,6 @@ CREATE TABLE `user_detail`
     PRIMARY KEY (`user_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='用户资料表';
+
+INSERT INTO `user_detail` (`user_id`, `nickname`)
+VALUES (10000, '管理员');

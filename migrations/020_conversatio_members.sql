@@ -10,6 +10,6 @@ CREATE TABLE `conversation_members`
     `joined_at`       DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     UNIQUE KEY `idx_conv_user` (`conversation_id`, `user_id`),
-    KEY `idx_user_visible` (`user_id`, `is_visible`)
+    KEY `idx_user_visible_pinned` (`user_id`, `is_visible`, `is_pinned` DESC)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4;

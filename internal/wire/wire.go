@@ -14,6 +14,7 @@ import (
 	"Cornerstone/internal/repository"
 	"Cornerstone/internal/service"
 
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/gin-gonic/gin"
 	mongoDrive "go.mongodb.org/mongo-driver/mongo"
 
@@ -23,13 +24,16 @@ import (
 // ApplicationContainer 封装了应用运行所需的所有顶级组件
 type ApplicationContainer struct {
 	Router       *gin.Engine
-	DB           *gorm.DB
-	Mongo        *mongoDrive.Database
 	CronMgr      *cron.Manager
 	KafkaManager *kafka.ConsumerManager
 }
 
-func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.Config) (*ApplicationContainer, error) {
+func BuildApplication(
+	db *gorm.DB,
+	elasticClient *elasticsearch.TypedClient,
+	mongoConn *mongoDrive.Database,
+	cfg *config.Config,
+) (*ApplicationContainer, error) {
 	// 数据库 Repo 实例
 	userRepo := repository.NewUserRepo(db)
 	userRolesRepo := repository.NewUserRolesRepo(db)
@@ -49,8 +53,8 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	agentMessageRepo := mongo.NewAgentMessageRepo(mongoConn)
 
 	// ES 实例
-	userESRepo := es.NewUserRepo()
-	postESRepo := es.NewPostRepo()
+	userESRepo := es.NewUserRepo(elasticClient)
+	postESRepo := es.NewPostRepo(elasticClient)
 
 	// Agent
 	toolHandler := llm.NewToolHandler(postESRepo)
@@ -107,7 +111,6 @@ func BuildApplication(db *gorm.DB, mongoConn *mongoDrive.Database, cfg *config.C
 	// 返回容器实例
 	return &ApplicationContainer{
 		Router:       router,
-		DB:           db,
 		CronMgr:      cronMgr,
 		KafkaManager: kafkaMgr,
 	}, nil

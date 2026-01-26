@@ -15,6 +15,7 @@ CREATE TABLE `post_comments`
     `updated_at`       DATETIME      NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (`id`),
     KEY `idx_post_root_deleted_created` (`post_id`, `root_id`, `is_deleted`, `created_at`),
-    KEY `idx_root_deleted_created` (`root_id`, `is_deleted`, `created_at`)
+    KEY `idx_root_deleted_created` (`root_id`, `is_deleted`, `created_at`),
+    KEY `idx_post_deleted` (`post_id`, `is_deleted`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='笔记评论表';

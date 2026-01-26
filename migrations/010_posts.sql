@@ -15,7 +15,8 @@ CREATE TABLE `posts`
     `created_at`      DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '创建时间',
     `updated_at`      DATETIME   NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP COMMENT '更新时间',
     PRIMARY KEY (`id`),
-    KEY `idx_user_id` (`user_id`)
+    KEY `idx_user_status_created` (`user_id`, `is_deleted`, `status`, `created_at` DESC),
+    KEY `idx_status_id` (`status`, `id` DESC)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='笔记主表';
 

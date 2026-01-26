@@ -66,7 +66,7 @@ func main() {
 	}
 
 	// ElasticSearch 连接
-	err = es.InitClient()
+	elasticClient, err := es.InitClient()
 	if err != nil {
 		log.Error("Fatal error: failed to initialize ElasticSearch", "err", err)
 		panic(err)
@@ -80,7 +80,7 @@ func main() {
 	}
 
 	// 依赖注入
-	app, err := wire.BuildApplication(db, mongoConn, cfg)
+	app, err := wire.BuildApplication(db, elasticClient, mongoConn, cfg)
 	if err != nil {
 		log.Error("Fatal error: failed to create application", "err", err)
 		panic(err)

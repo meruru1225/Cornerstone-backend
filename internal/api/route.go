@@ -123,6 +123,7 @@ func SetupRouter(group *HandlersGroup) *gin.Engine {
 			{
 				authOptGroup.GET("/recommend", group.PostHandler.RecommendPost)
 				authOptGroup.GET("/search", group.PostHandler.SearchPost)
+				authOptGroup.GET("/suggestion", group.PostHandler.Suggestion)
 				authOptGroup.GET("/lastest", group.PostHandler.LastestPost)
 				authOptGroup.GET("/detail/:post_id", group.PostHandler.GetPost)
 				authOptGroup.GET("/list/:user_id", group.PostHandler.GetPostByUserId)

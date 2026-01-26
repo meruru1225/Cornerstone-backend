@@ -10,8 +10,6 @@ import (
 	"github.com/elastic/go-elasticsearch/v8"
 )
 
-var Client *elasticsearch.TypedClient
-
 var (
 	UserIndex string
 	PostIndex string
@@ -23,7 +21,7 @@ const (
 )
 
 // InitClient 初始化 Elasticsearch 客户端
-func InitClient() error {
+func InitClient() (*elasticsearch.TypedClient, error) {
 	elasticCfg := config.Cfg.Elastic
 
 	UserIndex = elasticCfg.Indices.UserIndex
@@ -39,18 +37,18 @@ func InitClient() error {
 	}
 
 	var err error
-	Client, err = elasticsearch.NewTypedClient(cfg)
+	client, err := elasticsearch.NewTypedClient(cfg)
 	if err != nil {
 		log.Error("Cannot Connect to Elasticsearch", "err", err)
-		return err
+		return nil, err
 	}
 
-	info, err := Client.Info().Do(context.Background())
+	info, err := client.Info().Do(context.Background())
 	if err != nil {
 		log.Error("Cannot Connect to Elasticsearch", "err", err)
-		return err
+		return nil, err
 	}
 
 	log.Info("Connected to Elasticsearch", "version", info.Version.Int)
-	return nil
+	return client, nil
 }

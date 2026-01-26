@@ -6,6 +6,7 @@ import (
 	"Cornerstone/internal/pkg/redis"
 	"Cornerstone/internal/repository"
 	"context"
+	"errors"
 	"fmt"
 	log "log/slog"
 	"strconv"
@@ -18,12 +19,14 @@ import (
 type UserDetailHandler struct {
 	userDBFollowRepo repository.UserFollowRepo
 	userESRepo       es.UserRepo
+	postESRepo       es.PostRepo
 }
 
-func NewUserDetailHandler(userFollowDBRepo repository.UserFollowRepo, userESRepo es.UserRepo) *UserDetailHandler {
+func NewUserDetailHandler(userFollowDBRepo repository.UserFollowRepo, userESRepo es.UserRepo, postESRepo es.PostRepo) *UserDetailHandler {
 	return &UserDetailHandler{
 		userDBFollowRepo: userFollowDBRepo,
 		userESRepo:       userESRepo,
+		postESRepo:       postESRepo,
 	}
 }
 
@@ -60,13 +63,13 @@ func (s *UserDetailHandler) logic(ctx context.Context, msg *sarama.ConsumerMessa
 	if canalMsg.Type == UPDATE {
 		lockKey := consts.UserDetailESLock + strconv.FormatUint(user.ID, 10)
 		uuidStr := uuid.NewString()
-		lock, err := redis.TryLock(ctx, lockKey, uuidStr, 30*time.Second, 0)
+		lock, err := redis.TryLock(ctx, lockKey, uuidStr, 30*time.Second, -1)
 		defer redis.UnLock(ctx, lockKey, uuidStr)
 		if err != nil {
 			return err
 		}
 		if !lock {
-			return nil
+			return errors.New("acquire lock failed, retry later")
 		}
 		exist, err := s.userESRepo.Exist(ctx, user.ID)
 		if err != nil {
@@ -75,7 +78,17 @@ func (s *UserDetailHandler) logic(ctx context.Context, msg *sarama.ConsumerMessa
 		if !exist {
 			return nil
 		}
-		return s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
+		err = s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
+		if err != nil {
+			return err
+		}
+		lockKey = consts.UserDetailLock + strconv.FormatUint(user.ID, 10)
+		lock, err = redis.TryLock(ctx, lockKey, uuidStr, 30*time.Second, -1)
+		defer redis.UnLock(ctx, lockKey, uuidStr)
+		if err != nil {
+			return err
+		}
+		return s.postESRepo.UpdatePostUserDetail(ctx, user.ID, user.Nickname, user.AvatarURL)
 	} else if canalMsg.Type == INSERT {
 		return s.userESRepo.IndexUser(ctx, user, canalMsg.TS)
 	}

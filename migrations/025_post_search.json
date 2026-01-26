@@ -11,6 +11,17 @@
           "max_gram": 20
         }
       },
+      "tokenizer": {
+        "my_pinyin": {
+          "type": "pinyin",
+          "keep_first_letter": true,
+          "keep_full_pinyin": true,
+          "keep_original": true,
+          "limit_first_letter_length": 50,
+          "lowercase": true,
+          "remove_duplicated_term": true
+        }
+      },
       "analyzer": {
         "mixed_analyzer": {
           "type": "custom",
@@ -19,6 +30,9 @@
             "lowercase",
             "ngram_filter"
           ]
+        },
+        "pinyin_analyzer": {
+          "tokenizer": "my_pinyin"
         }
       }
     }
@@ -41,7 +55,13 @@
         "fields": {
           "suggestion": {
             "type": "completion",
-            "analyzer": "ik_max_word"
+            "analyzer": "pinyin_analyzer",
+            "search_analyzer": "pinyin_analyzer"
+          },
+          "pinyin": {
+            "type": "text",
+            "analyzer": "pinyin_analyzer",
+            "search_analyzer": "pinyin_analyzer"
           }
         }
       },

@@ -1,10 +1,12 @@
 package es
 
 import (
+	"Cornerstone/internal/pkg/util"
 	"context"
 	"errors"
 	"strconv"
 
+	"github.com/elastic/go-elasticsearch/v8"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types/enums/versiontype"
 	"github.com/goccy/go-json"
@@ -18,22 +20,45 @@ type UserRepo interface {
 }
 
 type UserRepoImpl struct {
+	client *elasticsearch.TypedClient
 }
 
-func NewUserRepo() UserRepo {
-	return &UserRepoImpl{}
+func NewUserRepo(client *elasticsearch.TypedClient) UserRepo {
+	return &UserRepoImpl{client: client}
 }
 
 func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, size int) ([]*UserES, int64, error) {
+	if keyword == "" {
+		return []*UserES{}, 0, nil
+	}
+
 	query := &types.Query{
-		Match: map[string]types.MatchQuery{
-			"nickname": {
-				Query: keyword,
+		Bool: &types.BoolQuery{
+			Should: []types.Query{
+				{
+					MultiMatch: &types.MultiMatchQuery{
+						Query: keyword,
+						Fields: []string{
+							"nickname^3",
+							"nickname.pinyin^1",
+						},
+						Boost: util.PtrFloat32(2.0),
+					},
+				},
+				{
+					MultiMatch: &types.MultiMatchQuery{
+						Query:     keyword,
+						Fields:    []string{"nickname"},
+						Fuzziness: util.PtrStr("AUTO"),
+						Boost:     util.PtrFloat32(0.5),
+					},
+				},
 			},
+			MinimumShouldMatch: util.PtrStr("1"),
 		},
 	}
 
-	res, err := Client.Search().
+	res, err := s.client.Search().
 		Index(UserIndex).
 		Query(query).
 		From(from).
@@ -49,6 +74,9 @@ func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, siz
 
 	for _, hit := range res.Hits.Hits {
 		var user UserES
+		if hit.Source_ == nil {
+			continue
+		}
 		if err := json.Unmarshal(hit.Source_, &user); err != nil {
 			continue
 		}
@@ -60,7 +88,7 @@ func (s *UserRepoImpl) SearchUser(ctx context.Context, keyword string, from, siz
 
 func (s *UserRepoImpl) Exist(ctx context.Context, id uint64) (bool, error) {
 	docID := strconv.FormatUint(id, 10)
-	res, err := Client.Exists(UserIndex, docID).Do(ctx)
+	res, err := s.client.Exists(UserIndex, docID).Do(ctx)
 	if err != nil {
 		return false, err
 	}
@@ -70,7 +98,7 @@ func (s *UserRepoImpl) Exist(ctx context.Context, id uint64) (bool, error) {
 func (s *UserRepoImpl) IndexUser(ctx context.Context, user *UserES, version int64) error {
 	docID := strconv.FormatUint(user.ID, 10)
 
-	_, err := Client.Index(UserIndex).
+	_, err := s.client.Index(UserIndex).
 		Id(docID).
 		Document(user).
 		Version(strconv.FormatInt(version, 10)).
@@ -92,7 +120,7 @@ func (s *UserRepoImpl) IndexUser(ctx context.Context, user *UserES, version int6
 
 func (s *UserRepoImpl) DeleteUser(ctx context.Context, id uint64) error {
 	docID := strconv.FormatUint(id, 10)
-	_, err := Client.Delete(UserIndex, docID).Do(ctx)
+	_, err := s.client.Delete(UserIndex, docID).Do(ctx)
 	if err != nil {
 		var e *types.ElasticsearchError
 		if errors.As(err, &e) {

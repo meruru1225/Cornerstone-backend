@@ -74,7 +74,7 @@ func NewConsumerManager(
 		rollback()
 		return nil, err
 	}
-	m.userDetailHandler = NewUserDetailHandler(userFollowDBRepo, userESRepo)
+	m.userDetailHandler = NewUserDetailHandler(userFollowDBRepo, userESRepo, postESRepo)
 
 	m.userFollowsConsumer, err = sarama.NewConsumerGroup(cfg.Kafka.Brokers, cfg.KafkaUserFollowsConsumer.GroupID, saramaCfg)
 	if err != nil {

@@ -4,6 +4,7 @@ CREATE TABLE `likes`
     `post_id`    BIGINT   NOT NULL COMMENT '笔记ID',
     `created_at` DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP COMMENT '点赞时间',
     PRIMARY KEY (`user_id`, `post_id`),
-    KEY `idx_post_id` (`post_id`)
+    KEY `idx_post_id` (`post_id`),
+    KEY `idx_user_created` (`user_id`, `created_at` DESC)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='点赞关系表 (M2M)';

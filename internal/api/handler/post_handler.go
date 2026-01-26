@@ -59,6 +59,18 @@ func (s *PostHandler) SearchPost(c *gin.Context) {
 	response.Success(c, posts)
 }
 
+func (s *PostHandler) Suggestion(c *gin.Context) {
+	keyword := c.Query("keyword")
+
+	suggestions, err := s.postSvc.Suggestion(c.Request.Context(), keyword)
+	if err != nil {
+		response.Error(c, err)
+		return
+	}
+
+	response.Success(c, suggestions)
+}
+
 func (s *PostHandler) SearchPostMe(c *gin.Context) {
 	userID := c.GetUint64("user_id")
 	var searchDTO dto.PostListDTO

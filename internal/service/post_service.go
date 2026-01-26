@@ -28,6 +28,7 @@ const MaxOffsetLimit = 10000
 type PostService interface {
 	RecommendPost(ctx context.Context, sessionID string, cursor string, pageSize int) (*dto.PostWaterfallDTO, error)
 	SearchPost(ctx context.Context, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
+	Suggestion(ctx context.Context, keyword string) ([]string, error)
 	SearchPostMe(ctx context.Context, userID uint64, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	LastestPost(ctx context.Context, page, pageSize int) (*dto.PostWaterfallDTO, error)
 	CreatePost(ctx context.Context, userID uint64, postDTO *dto.PostBaseDTO) error
@@ -251,6 +252,31 @@ func (s *postServiceImpl) SearchPost(ctx context.Context, keyword string, page, 
 		},
 		s.batchToPostDTOByES,
 	)
+}
+
+// Suggestion 搜索建议
+func (s *postServiceImpl) Suggestion(ctx context.Context, keyword string) ([]string, error) {
+	keyword = strings.TrimSpace(keyword)
+
+	if keyword == "" {
+		return []string{}, nil
+	}
+
+	esSuggestions, err := s.postESRepo.GetSuggestions(ctx, keyword)
+	if err != nil {
+		return nil, err
+	}
+
+	finalSuggestions := make([]string, 0, len(esSuggestions)+1)
+	finalSuggestions = append(finalSuggestions, keyword)
+
+	for _, sug := range esSuggestions {
+		if !strings.EqualFold(sug, keyword) {
+			finalSuggestions = append(finalSuggestions, sug)
+		}
+	}
+
+	return finalSuggestions, nil
 }
 
 func (s *postServiceImpl) SearchPostMe(ctx context.Context, userID uint64, keyword string, page, pageSize int) (*dto.PostWaterfallDTO, error) {

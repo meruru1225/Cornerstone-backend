@@ -12,4 +12,8 @@ CREATE TABLE `users`
     UNIQUE KEY `idx_username` (`username`),
     UNIQUE KEY `idx_phone` (`phone`)
 ) ENGINE = InnoDB
-  DEFAULT CHARSET = utf8mb4 COMMENT ='用户表';
+  DEFAULT CHARSET = utf8mb4 
+  AUTO_INCREMENT=10001 COMMENT ='用户表';
+
+INSERT INTO `users` (`id`, `username`, `password`)
+VALUES (10000, 'admin', '$2a$10$7czhmrnCjk/0w7DdAIrufumMdqlhH3vXoofiO.QosufEk4KkLGnqy');

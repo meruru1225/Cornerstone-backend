@@ -7,3 +7,8 @@ CREATE TABLE `roles`
     UNIQUE KEY `idx_role_name` (`name`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='角色表';
+
+INSERT INTO `roles` (`id`, `name`, `description`)
+VALUES (1, 'USER', '普通用户'),
+       (2, 'AUDITOR', '审核员'),
+       (3, 'ADMIN', '管理员');

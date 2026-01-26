@@ -6,3 +6,8 @@ CREATE TABLE `user_roles`
     KEY `idx_role_id` (`role_id`)
 ) ENGINE = InnoDB
   DEFAULT CHARSET = utf8mb4 COMMENT ='用户角色关系表 (M2M)';
+
+INSERT INTO `user_roles` (`user_id`, `role_id`)
+VALUES (10000, 1),
+       (10000, 2),
+       (10000, 3);
