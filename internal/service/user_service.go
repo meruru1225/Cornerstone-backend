@@ -514,7 +514,7 @@ func (s *UserServiceImpl) UpdateAvatar(ctx context.Context, id uint64, objectNam
 	if err != nil {
 		return err
 	}
-	if oldAvatar != "" {
+	if oldAvatar != "" && oldAvatar != consts.DefaultAvatarURL {
 		_ = minio.DeleteFile(ctx, oldAvatar)
 	}
 	idStr := strconv.FormatUint(id, 10)

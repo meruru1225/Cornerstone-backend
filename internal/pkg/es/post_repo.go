@@ -420,6 +420,7 @@ func (s *PostRepoImpl) vectorSearch(ctx context.Context, vector []float32, limit
 			NumCandidates: util.PtrInt(limit * 2),
 			Filter:        filters,
 		}).
+		MinScore(0.75).
 		Source_(&types.SourceFilter{Excludes: []string{"content_vector"}}).
 		Size(limit)
 
@@ -458,7 +459,8 @@ func (s *PostRepoImpl) textSearch(ctx context.Context, text string, limit int, f
 					},
 				},
 			},
-			Filter: filters,
+			Filter:             filters,
+			MinimumShouldMatch: util.PtrStr("1"),
 		},
 	}
 
