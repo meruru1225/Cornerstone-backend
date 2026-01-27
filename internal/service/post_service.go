@@ -509,7 +509,7 @@ func (s *postServiceImpl) UpdatePostContent(ctx context.Context, userID uint64, 
 		if !newMediaMap[oldMedia.MediaURL] {
 			toDeleteKeys = append(toDeleteKeys, oldMedia.MediaURL)
 			if oldMedia.CoverURL != nil && *oldMedia.CoverURL != "" {
-				toDeleteKeys = append(toDeleteKeys, minio.GetPublicURL(*oldMedia.CoverURL))
+				toDeleteKeys = append(toDeleteKeys, *oldMedia.CoverURL)
 			}
 		}
 	}
