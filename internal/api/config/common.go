@@ -26,9 +26,8 @@ type Config struct {
 
 // ServerConfig Server配置
 type ServerConfig struct {
-	Port          int    `mapstructure:"port"`
-	Domain        string `mapstructure:"domain"`
-	SearchGateway string `mapstructure:"search_gateway"`
+	Port   int    `mapstructure:"port"`
+	Domain string `mapstructure:"domain"`
 }
 
 // DBConfig 数据库配置
@@ -65,6 +64,7 @@ type LLMConfig struct {
 	ThinkingMode   string           `mapstructure:"thinking_mode"`
 	Dimensions     int              `mapstructure:"dimensions"`
 	ApiKey         string           `mapstructure:"api_key"`
+	SearchGateway  string           `mapstructure:"search_gateway"`
 	PromptsPath    PromptPathConfig `mapstructure:"prompts_path"`
 }
 

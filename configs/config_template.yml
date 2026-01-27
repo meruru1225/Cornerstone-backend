@@ -1,7 +1,6 @@
 server:
   port: 8080
   domain: "{{COOKIE_DOMAIN}}"
-  search_gateway: "{{SEARCH_GATEWAY}}"
 
 database:
   dsn: "{{DB_DSN}}"
@@ -32,6 +31,7 @@ llm:
   thinking_mode: "disabled"
   dimensions: 1024
   api_key: "{{LLM_API_KEY}}"
+  search_gateway: "{{SEARCH_GATEWAY}}"
   prompts_path:
     aggressive_tag: "./prompts/aggressive-tag.txt"
     chat: "./prompts/chat.txt"

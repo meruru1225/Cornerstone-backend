@@ -43,7 +43,6 @@ func NewToolHandler(postRepo es.PostRepo) *ToolHandler {
 		chromedp.Flag("disable-blink-features", "AutomationControlled"),
 		chromedp.Flag("blink-settings", "imagesEnabled=false"),
 		chromedp.UserAgent(ua),
-		chromedp.ProxyServer(config.Cfg.Server.SearchGateway),
 	)
 
 	allocCtx, _ := chromedp.NewExecAllocator(context.Background(), opts...)
@@ -54,10 +53,9 @@ func NewToolHandler(postRepo es.PostRepo) *ToolHandler {
 	}
 
 	client := resty.New().
-		SetTimeout(20*time.Second).
+		SetTimeout(25*time.Second).
 		SetTLSClientConfig(&tls.Config{InsecureSkipVerify: true}).
-		SetHeader("User-Agent", ua).
-		SetProxy(config.Cfg.Server.SearchGateway)
+		SetHeader("User-Agent", ua)
 
 	return &ToolHandler{
 		postRepo:   postRepo,
@@ -150,10 +148,15 @@ func (s *ToolHandler) WebSearch(ctx context.Context, argsJson string) (string, e
 		return "", errors.New("参数解析失败")
 	}
 
+	gateway := config.Cfg.LLM.SearchGateway
+
 	formData := url.Values{}
 	formData.Set("q", args.Query)
 
-	resp, err := s.httpClient.R().SetContext(ctx).SetFormDataFromValues(formData).Post("https://html.duckduckgo.com/html")
+	resp, err := s.httpClient.R().
+		SetContext(ctx).
+		SetFormDataFromValues(formData).
+		Post(gateway + "/search")
 	if err != nil {
 		log.ErrorContext(ctx, "WebSearch", "error", err)
 		return "", errors.New("网络搜索失败")
@@ -175,9 +178,7 @@ func (s *ToolHandler) WebSearch(ctx context.Context, argsJson string) (string, e
 			u, _ := url.Parse(link)
 			rawLink := u.Query().Get("uddg")
 			if decodedLink, err := url.QueryUnescape(rawLink); err == nil {
-				link = decodedLink
-			} else {
-				link = rawLink
+				link = fmt.Sprintf("%s/redirect?url=%s", gateway, url.QueryEscape(decodedLink))
 			}
 		}
 		title := strings.TrimSpace(anchor.Text())
@@ -185,7 +186,7 @@ func (s *ToolHandler) WebSearch(ctx context.Context, argsJson string) (string, e
 		builder.WriteString(fmt.Sprintf("[%d] 标题: %s\n链接: %s\n摘要: %s\n\n", realIdx, title, link, snippet))
 		realIdx++
 	})
-	log.Info("WebSearch", "query", args.Query, "results", builder.String())
+	log.InfoContext(ctx, "WebSearch", "query", args.Query, "results", builder.String())
 	return builder.String(), nil
 }
 
@@ -237,7 +238,7 @@ func (s *ToolHandler) WebFetch(ctx context.Context, argsJson string) (string, er
 		text = text[:3000] + "... [内容已截断]"
 	}
 
-	log.Info("WebFetch", "url", args.URL, "title", article.Title, "content", text)
+	log.InfoContext(ctx, "WebFetch", "url", args.URL, "title", article.Title, "content", text)
 	return fmt.Sprintf("标题: %s\n正文内容: %s", article.Title, text), nil
 }
 
